@@ -39,21 +39,29 @@ void ota_show_status(void) {
  * Lädt die JSON-Datei von GitHub und überprüft die Version
  */
 bool ota_check_for_update(void) {
+	int ret;
 	esp_http_client_config_t config = {
 		.url = OTA_JSON_URL,
 		.timeout_ms = 5000,
 	};
 
 	esp_http_client_handle_t client = esp_http_client_init(&config);
-	esp_http_client_perform(client);
+	ESP_ERROR_CHECK(esp_http_client_perform(client));
 
 	char buffer[512] = {0};
-	esp_http_client_read(client, buffer, sizeof(buffer));
+	ret = esp_http_client_read(client, buffer, sizeof(buffer));
+	if(ret <= 0) {
+		printf("Fehler: Konnte JSON nicht herunterladen\n");
+		esp_http_client_cleanup(client);
+		return false;
+	}
 	esp_http_client_cleanup(client);
 
 	cJSON *json = cJSON_Parse(buffer);
 	if (!json) {
 		printf("Fehler: JSON ungültig\n");
+		printf("JSON-Parsing fehlgeschlagen: %s\n", cJSON_GetErrorPtr());
+		printf("JSON: %s\n", buffer);
 		return false;
 	}
 
