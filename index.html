@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 OTA Update</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        h2 { color: #333; }
+        #fileInput { margin: 20px; }
+        #uploadBtn { padding: 10px 20px; background: #28a745; color: white; border: none; cursor: pointer; }
+        #uploadBtn:disabled { background: #ccc; cursor: not-allowed; }
+        #status { margin-top: 20px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h2>ESP32 OTA Firmware Update</h2>
+    <input type="file" id="fileInput">
+    <button id="uploadBtn" disabled>Update starten</button>
+    <p id="status"></p>
+
+    <script>
+        const fileInput = document.getElementById("fileInput");
+        const uploadBtn = document.getElementById("uploadBtn");
+        const status = document.getElementById("status");
+
+        fileInput.addEventListener("change", () => {
+            uploadBtn.disabled = !fileInput.files.length;
+        });
+
+        uploadBtn.addEventListener("click", () => {
+            if (!fileInput.files.length) return;
+            const file = fileInput.files[0];
+
+            uploadBtn.disabled = true;
+            status.innerText = "Uploading...";
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            fetch("/update", { method: "POST", body: file })
+                .then(response => response.text())
+                .then(result => {
+                    status.innerText = result;
+                    uploadBtn.disabled = false;
+                })
+                .catch(error => {
+                    status.innerText = "Fehler beim Upload!";
+                    uploadBtn.disabled = false;
+                });
+        });
+    </script>
+</body>
+</html>
