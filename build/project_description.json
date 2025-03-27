@@ -1,7 +1,7 @@
 {
     "version":            "1.1",
     "project_name":       "firmware",
-    "project_version":    "publish-dirty",
+    "project_version":    "publish-1-gb626787-dirty",
     "project_path":       "/Users/fabianbolte/esp/UDOO_KEY/ESP32",
     "idf_path":           "/Users/fabianbolte/esp/v5.2/esp-idf",
     "build_dir":          "/Users/fabianbolte/esp/UDOO_KEY/ESP32/build",
