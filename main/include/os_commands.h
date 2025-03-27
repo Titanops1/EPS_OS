@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 int version_cmd(int argc, char **argv);
+int update(int argc, char **argv);
 int get_task_list_cmd(int argc, char **argv);
 int startApp_cmd(int argc, char **argv);
 int stopApp_cmd(int argc, char **argv);

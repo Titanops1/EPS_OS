@@ -3,7 +3,9 @@
 #include "uart_lib.h"
 #include "i2c_lib.h"
 #include "http_ota.h"
+#include "ota_update.h"
 #include "systemCalls.h"
+#include "version.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -26,6 +28,13 @@ esp_console_cmd_t version_command = {
 	.help = "Zeigt die Version des ESP32 OS",
 	.hint = NULL,
 	.func = &version_cmd,
+};
+
+esp_console_cmd_t update_command = {
+	.command = "update",
+	.help = "Führt ein Firmware-Update durch",
+	.hint = NULL,
+	.func = &update,
 };
 
 esp_console_cmd_t taskList_command = {
@@ -122,6 +131,13 @@ esp_console_cmd_t interface_command = {
 // Handler für den "version"-Befehl
 int version_cmd(int argc, char **argv) {
 	printf("ESP32 OS Version: %s\n", OS_VERSION);
+	return 0;
+}
+
+int update(int argc, char **argv) {
+	if(argc == 1) {
+		check_and_update_firmware();
+	}
 	return 0;
 }
 
@@ -388,6 +404,7 @@ void register_commands(void)
 	//Register OS Commands
 	//define in os_commands.h
 	esp_console_cmd_register(&version_command);
+	esp_console_cmd_register(&update_command);
 	esp_console_cmd_register(&taskList_command);
 	esp_console_cmd_register(&appList_command);
 	esp_console_cmd_register(&startApp_command);
