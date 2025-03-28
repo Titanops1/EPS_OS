@@ -45,6 +45,7 @@ esp_err_t ota_update_handler(httpd_req_t *req) {
 		err = esp_ota_write(ota_handle, buf, received);
 		if (err != ESP_OK) {
 			ESP_LOGE(TAG, "Error during OTA write");
+			esp_ota_mark_app_invalid_rollback_and_reboot();
 			return ESP_FAIL;
 		}
 	}
@@ -58,12 +59,14 @@ esp_err_t ota_update_handler(httpd_req_t *req) {
 	err = esp_ota_end(ota_handle);
 	if (err != ESP_OK) {
 		ESP_LOGE(TAG, "OTA end failed");
+		esp_ota_mark_app_invalid_rollback_and_reboot();
 		return ESP_FAIL;
 	}
 
 	esp_err_t set_boot = esp_ota_set_boot_partition(update_partition);
 	if (set_boot != ESP_OK) {
 		ESP_LOGE(TAG, "esp_ota_set_boot_partition failed");
+		esp_ota_mark_app_invalid_rollback_and_reboot();
 		return ESP_FAIL;
 	}
 

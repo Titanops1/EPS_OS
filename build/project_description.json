@@ -1,7 +1,7 @@
 {
     "version":            "1.1",
     "project_name":       "firmware",
-    "project_version":    "publish-2-g5abcf91-dirty",
+    "project_version":    "publish-3-g246cf9f-dirty",
     "project_path":       "/Users/fabianbolte/esp/UDOO_KEY/ESP32",
     "idf_path":           "/Users/fabianbolte/esp/v5.2/esp-idf",
     "build_dir":          "/Users/fabianbolte/esp/UDOO_KEY/ESP32/build",
@@ -835,7 +835,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [ "espressif__elf_loader" ],
             "file": "/Users/fabianbolte/esp/UDOO_KEY/ESP32/build/esp-idf/main/libmain.a",
-            "sources": [ "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/http_ota.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/i2c_lib.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/main.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/os_commands.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/ota_update.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/systemCalls.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/uart_lib.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/wifi.c" ],
+            "sources": [ "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/http_ota.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/i2c_lib.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/main.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/os_commands.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/ota_update.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/systemCalls.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/uart_lib.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/main/wifi.c", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/build/ca_cert.pem.S", "/Users/fabianbolte/esp/UDOO_KEY/ESP32/build/dropbox.pem.S" ],
             "include_dirs": [ "./include/" ]
         },
         "mbedtls": {

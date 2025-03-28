@@ -30,6 +30,13 @@ esp_console_cmd_t version_command = {
 	.func = &version_cmd,
 };
 
+esp_console_cmd_t webserver_command = {
+	.command = "webserver",
+	.help = "Startet oder stoppt den Webserver",
+	.hint = "<start stop>",
+	.func = &handle_update_server,
+};
+
 esp_console_cmd_t update_command = {
 	.command = "update",
 	.help = "Führt ein Firmware-Update durch",
@@ -131,6 +138,19 @@ esp_console_cmd_t interface_command = {
 // Handler für den "version"-Befehl
 int version_cmd(int argc, char **argv) {
 	printf("ESP32 OS Version: %s\n", OS_VERSION);
+	return 0;
+}
+
+int handle_update_server(int argc, char **argv) {
+	if(argc < 2) {
+		printf("Usage: webserver <start stop>\n");
+		return 1;
+	}
+	if(strcmp(argv[1], "start") == 0) {
+		start_webserver();
+	} else if(strcmp(argv[1], "stop") == 0) {
+		stop_webserver();
+	}
 	return 0;
 }
 
@@ -404,6 +424,7 @@ void register_commands(void)
 	//Register OS Commands
 	//define in os_commands.h
 	esp_console_cmd_register(&version_command);
+	esp_console_cmd_register(&webserver_command);
 	esp_console_cmd_register(&update_command);
 	esp_console_cmd_register(&taskList_command);
 	esp_console_cmd_register(&appList_command);

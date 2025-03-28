@@ -1,5 +1,5 @@
 {
-	"version": "1.0.1",
-	"url": "http://raw.githubusercontent.com/Titanops1/EPS_OS/main/build/firmware.bin",
-	"checksum": "b09e2efad121347e1c7ba4419276d29d9aa363ac81f400d1e714db713f05dae0"
-  }
+	"version": "1.0.2",
+	"url": "https://raw.githubusercontent.com/Titanops1/EPS_OS/main/build/firmware.bin",
+	"checksum": "252debee3926d8fd953f8ee00250f155070370044194617a2928da72374974e3"
+}

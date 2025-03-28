@@ -5,6 +5,7 @@
 #include "../../register_def.h"
 #include "uart_lib.h"
 
+#include "esp_sntp.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 
@@ -401,6 +402,7 @@ EventBits_t wlan_connect(const char *ssid, const char *password)
 
 	if (bits & WIFI_CONNECTED_BIT) {
 		ESP_LOGI(TAG, "[WiFi] connected to ap SSID:%s", ssid);
+		obtain_time();
 	} else if (bits & WIFI_FAIL_BIT) {
 		ESP_LOGI(TAG, "[WiFi] Failed to connect to SSID:%s, password:%s",
 				 ssid, password);
@@ -470,4 +472,31 @@ void wifi_init_sta(void)
 	connect_saved_wifi();
 	wifi_handle.wifi_reconnect = 1;
 	ESP_LOGI(TAG, "[WiFi] wifi_init_sta finished.");
+}
+
+void obtain_time(void) {
+    printf("Synchronizing time with NTP...\n");
+
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");  // Standard-NTP-Server
+    sntp_init();
+
+    // Warten, bis Zeit synchronisiert ist
+    time_t now = 0;
+    struct tm timeinfo = { 0 };
+    int retry = 0;
+    const int max_retries = 15;
+
+    while (timeinfo.tm_year < (2020 - 1900) && ++retry < max_retries) {
+        printf("Waiting for system time to be set... (%d/%d)\n", retry, max_retries);
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
+        time(&now);
+        localtime_r(&now, &timeinfo);
+    }
+
+    if (retry >= max_retries) {
+        printf("Failed to get NTP time.\n");
+    } else {
+        printf("Time synchronized: %s", asctime(&timeinfo));
+    }
 }

@@ -83,5 +83,6 @@ void start_wifi();
 void stop_wifi();
 void restart_wifi();
 void wifi_init_sta(void);
+void obtain_time(void);
 
 #endif
