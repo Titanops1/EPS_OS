@@ -16,7 +16,7 @@ static char firmware_checksum[65];
 extern const char ca_cert_start[] asm("_binary_ca_cert_pem_start");
 extern const char ca_cert_end[] asm("_binary_ca_cert_pem_end");
 
-static char response_buffer[1024] = {0};
+static char response_buffer[512] = {0};
 static int response_len = 0;
 
 void remove_whitespace(char *str) {
@@ -56,8 +56,9 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 		case HTTP_EVENT_ERROR:
 			if (file) {
 				fclose(file);
+				file = NULL;
 			}
-			//printf("HTTP_EVENT_ERROR\n");
+			printf("HTTP_EVENT_ERROR\n");
 			break;
 		case HTTP_EVENT_ON_CONNECTED:
 			//printf("HTTP_EVENT_ON_CONNECTED\n");
@@ -66,6 +67,7 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 		case HTTP_EVENT_ON_DATA:
 			if (!file) {
 				fclose(file);
+				file = NULL;
 				//printf("HTTP_EVENT_ON_DATA: Datei nicht geöffnet\n");
 				return ESP_FAIL;
 			}
@@ -76,16 +78,20 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 			}
 			break;
 		case HTTP_EVENT_ON_FINISH:
+			printf("HTTP_EVENT_ON_FINISH\n");
 			if (file) {
+				printf("File closed\n");
 				fclose(file);
+				file = NULL;
 			}
-			//printf("HTTP_EVENT_ON_FINISH\n");
 			break;
 		case HTTP_EVENT_DISCONNECTED:
+			printf("HTTP_EVENT_DISCONNECTED\n");
 			if (file) {
+				printf("File closed\n");
 				fclose(file);
+				file = NULL;
 			}
-			//printf("HTTP_EVENT_DISCONNECTED\n");
 			break;
 		default:
 			//printf("Unbekanntes Ereignis: %d\n", evt->event_id);
@@ -251,7 +257,9 @@ bool ota_perform_update(void) {
 		return false;
 	}
 
-	if (esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &update_handle) != ESP_OK) {
+	esp_err_t err = esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &update_handle);
+	if (err != ESP_OK) {
+		ESP_LOGE("UPDATE_TASK", "esp_ota_begin fehlgeschlagen: %s", esp_err_to_name(err));
 		fclose(file);
 		printf("Fehler: OTA-Begin fehlgeschlagen.\n");
 		return false;
