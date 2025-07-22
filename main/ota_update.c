@@ -63,7 +63,7 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 			break;
 		case HTTP_EVENT_ON_CONNECTED:
 			//printf("HTTP_EVENT_ON_CONNECTED\n");
-			file = fopen(OTA_FILE_PATH, "ab");
+			file = fopen(OTA_FILE_PATH, "wb");
 			file_downlod_size = 0;
 			break;
 		case HTTP_EVENT_ON_DATA:
@@ -84,7 +84,6 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 		case HTTP_EVENT_ON_FINISH:
 			printf("HTTP_EVENT_ON_FINISH\n");
 			if (file) {
-				printf("File closed\n");
 				fclose(file);
 				file = NULL;
 			}
@@ -92,7 +91,6 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 		case HTTP_EVENT_DISCONNECTED:
 			printf("HTTP_EVENT_DISCONNECTED\n");
 			if (file) {
-				printf("File closed\n");
 				fclose(file);
 				file = NULL;
 			}
@@ -312,12 +310,15 @@ void check_and_update_firmware(void) {
 				printf("Checksumme OK! Starte Update...\n");
 				if (!ota_perform_update()) {
 					printf("Update fehlgeschlagen, Rollback wird ausgeführt.\n");
+					remove(OTA_FILE_PATH);  // Firmware-Datei löschen
 				}
 			} else {
 				printf("Fehler: Checksumme falsch! Update abgebrochen.\n");
+				remove(OTA_FILE_PATH);  // Firmware-Datei löschen
 			}
 		} else {
 			printf("Fehler beim Download!\n");
+			remove(OTA_FILE_PATH);  // Firmware-Datei löschen
 		}
 	} else {
 		printf("Keine neue Firmware gefunden.\n");
