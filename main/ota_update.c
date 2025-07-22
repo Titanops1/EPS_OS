@@ -18,6 +18,7 @@ extern const char ca_cert_end[] asm("_binary_ca_cert_pem_end");
 
 static char response_buffer[512] = {0};
 static int response_len = 0;
+uint32_t file_downlod_size = 0;
 
 void remove_whitespace(char *str) {
     char *src = str, *dst = str;
@@ -63,6 +64,7 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 		case HTTP_EVENT_ON_CONNECTED:
 			//printf("HTTP_EVENT_ON_CONNECTED\n");
 			file = fopen(OTA_FILE_PATH, "ab");
+			file_downlod_size = 0;
 			break;
 		case HTTP_EVENT_ON_DATA:
 			if (!file) {
@@ -73,7 +75,9 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 			}
 			if (evt->data_len > 0) {
 				fwrite(evt->data, 1, evt->data_len, file);
-				printf("HTTP_EVENT_ON_DATA, len=%d\n", evt->data_len);
+				file_downlod_size += evt->data_len;
+				printf("File download, size=%ld Byte\n", file_downlod_size);
+				//printf("HTTP_EVENT_ON_DATA, len=%d\n", evt->data_len);
 				//printf("Empfangene Daten: %.*s\n", evt->data_len, (char*)evt->data);
 			}
 			break;
