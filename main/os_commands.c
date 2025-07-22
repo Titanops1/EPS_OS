@@ -121,6 +121,13 @@ esp_console_cmd_t wlan_command = {
 	.func = &wlan_cmd,
 };
 
+esp_console_cmd_t reboot_command = {
+	.command = "reboot",
+	.help = "Startet das System neu",
+	.hint = NULL,
+	.func = &cmd_reboot,
+};
+
 esp_console_cmd_t shutdown_command = {
 	.command = "shutdown",
 	.help = "Fährt das System herunter oder startet es neu",
@@ -338,7 +345,7 @@ int wlan_cmd(int argc, char **argv) {
 		bits = wlan_connect(argv[2], argv[3]);
 		if(bits & WIFI_CONNECTED_BIT) {
 			ESP_LOGI("WIFI", "Speichere SSID: %s", argv[1]);
-			save_wifi_credentials(argv[1], argv[2]);
+			save_wifi_credentials(argv[2], argv[3]);
 		}else {
 			ESP_LOGI("WIFI", "WI-FI-Verbindung fehlgeschlagen mit Fehler %ld", bits);
 		}
@@ -389,19 +396,35 @@ int cmd_wifi_forget(int argc, char **argv) {
 	return 0;
 }
 
+int cmd_reboot(int argc, char **argv) {
+	esp_restart();
+	return 0;
+}
+
 int cmd_shutdown(int argc, char **argv) {
 	if(argc < 3) {
 		printf("Usage: shutdown <-r -h> <time>\n");
 		return 1;
 	}
 	if(strcmp(argv[1], "-r") == 0) {
-		printf("System wird in %d Sekunden neu gestartet\n", atoi(argv[2]));
-		vTaskDelay(pdMS_TO_TICKS(atoi(argv[2])*1000));
-		esp_restart();
+		if(strcmp(argv[2], "now") == 0) {
+			printf("System wird neu gestartet\n");
+			esp_restart();
+		}else {
+			printf("System wird in %d Sekunden neu gestartet\n", atoi(argv[2]));
+			vTaskDelay(pdMS_TO_TICKS(atoi(argv[2])*1000));
+			esp_restart();
+		}
 	} else if(strcmp(argv[1], "-h") == 0) {
-		vTaskDelay(pdMS_TO_TICKS(atoi(argv[2])*1000));
-		esp_sleep_enable_timer_wakeup((uint64_t)(281474976710656)); // ~8,9 Jahre
-		esp_deep_sleep_start();
+		if(strcmp(argv[2], "now") == 0) {
+			printf("System wird heruntergefahren\n");
+			esp_deep_sleep_start();
+		}else {
+			printf("System wird in %d Sekunden heruntergefahren\n", atoi(argv[2]));
+			vTaskDelay(pdMS_TO_TICKS(atoi(argv[2])*1000));
+			esp_sleep_enable_timer_wakeup((uint64_t)(281474976710656)); // ~8,9 Jahre
+			esp_deep_sleep_start();
+		}
 	}
 	return 0;
 }
@@ -437,6 +460,7 @@ void register_commands(void)
 	esp_console_cmd_register(&free_mem_command);
 	esp_console_cmd_register(&wlan_command);
 	esp_console_cmd_register(&wlan_printip_command);
+	esp_console_cmd_register(&reboot_command);
 	esp_console_cmd_register(&shutdown_command);
 	esp_console_cmd_register(&interface_command);
 }

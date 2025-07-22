@@ -20,6 +20,7 @@ int wlan_ip_cmd(int argc, char **argv);
 int cmd_wifi_scan(int argc, char **argv);
 int cmd_wifi_auto(int argc, char **argv);
 int cmd_wifi_forget(int argc, char **argv);
+int cmd_reboot(int argc, char **argv);
 int cmd_shutdown(int argc, char **argv);
 int interface_cmd(int argc, char **argv);
 void register_commands(void);
