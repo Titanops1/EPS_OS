@@ -23,6 +23,21 @@ uint32_t file_downlod_size = 0;
 int64_t start_time = 0;
 static int g_firmware_content_length = -1;
 
+#define PROGRESS_WIDTH 40
+
+void print_progress_bar(int current, int total) {
+    int progress = (current * PROGRESS_WIDTH) / total;
+    printf("\r[");
+    for (int i = 0; i < PROGRESS_WIDTH; i++) {
+        if (i < progress)
+            printf("#");
+        else
+            printf(" ");
+    }
+    printf("] %3d %%", (current * 100) / total);
+    fflush(stdout);
+}
+
 void remove_whitespace(char *str) {
 	char *src = str, *dst = str;
 	while (*src) {
@@ -84,13 +99,14 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 			if (evt->data_len > 0) {
 				fwrite(evt->data, 1, evt->data_len, file);
 				file_downlod_size += evt->data_len;
+				print_progress_bar(file_downlod_size, g_firmware_content_length);
 				//printf("File download, size=%ld Byte\n", file_downlod_size);
 				//printf("HTTP_EVENT_ON_DATA, len=%d\n", evt->data_len);
 				//printf("Empfangene Daten: %.*s\n", evt->data_len, (char*)evt->data);
 			}
 			break;
 		case HTTP_EVENT_ON_FINISH:
-			printf("HTTP_EVENT_ON_FINISH\n");
+			//printf("HTTP_EVENT_ON_FINISH\n");
 			if (file) {
 				fclose(file);
 				file = NULL;
@@ -102,14 +118,14 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 
 			if (duration_sec > 0) {
 				float speed_kbps = (file_downlod_size / 1024.0) / duration_sec;
-				printf("Download abgeschlossen: %lu Bytes in %.2f Sekunden\n", file_downlod_size, duration_sec);
+				printf("\nDownload abgeschlossen: %lu Bytes in %.2f Sekunden\n", file_downlod_size, duration_sec);
 				printf("Durchschnittliche Geschwindigkeit: %.2f KB/s\n", speed_kbps);
 			} else {
 				printf("Download abgeschlossen. Zeitmessung zu kurz oder fehlgeschlagen.\n");
 			}
 			break;
 		case HTTP_EVENT_DISCONNECTED:
-			printf("HTTP_EVENT_DISCONNECTED\n");
+			//printf("HTTP_EVENT_DISCONNECTED\n");
 			if (file) {
 				fclose(file);
 				file = NULL;
@@ -118,7 +134,7 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 		case HTTP_EVENT_ON_HEADER:
 			if (strcasecmp(evt->header_key, "Content-Length") == 0) {
 				g_firmware_content_length = atoi(evt->header_value);
-				printf("Content-Length (Header): %d Bytes\n", g_firmware_content_length);
+				printf("Firmwaregröße: %d Bytes\n", g_firmware_content_length);
 			}
 			break;
 		default:
@@ -242,14 +258,14 @@ bool ota_download_firmware(const char *url) {
 	};
 
 	esp_http_client_handle_t client = esp_http_client_init(&config);
-	esp_err_t err = esp_http_client_perform(client);
+	esp_http_client_perform(client);
 
 	if (g_firmware_content_length > 0) {
-		printf("Gesamtgröße der Firmware laut Header: %d Bytes\n", g_firmware_content_length);
+		printf("Gesamtgröße der Firmware: %d Bytes\n", g_firmware_content_length);
 	} else {
-		printf("Content-Length konnte nicht aus Header gelesen werden.\n");
+		printf("Gesamtgröße der Firmware konnte nicht aus Header gelesen werden.\n");
 	}
-	
+
 	esp_http_client_cleanup(client);
 	return true;
 }

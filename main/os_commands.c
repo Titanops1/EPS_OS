@@ -142,6 +142,13 @@ esp_console_cmd_t interface_command = {
 	.func = &interface_cmd,
 };
 
+esp_console_cmd_t debug_command = {
+	.command = "debug",
+	.help = "Konfiguriert die Debug-Ausgabe",
+	.hint = "<None Error Warnung Info Debug All>",
+	.func = &debug_cmd,
+};
+
 // Handler für den "version"-Befehl
 int version_cmd(int argc, char **argv) {
 	printf("ESP32 OS Version: %s\n", OS_VERSION);
@@ -442,6 +449,44 @@ int interface_cmd(int argc, char **argv) {
 	return 0;
 }
 
+int debug_cmd(int argc, char **argv)
+{
+	if(argc < 2) {
+		printf("Usage: debug <None Error Warnung Info Debug All>\n");
+		return 1;
+	}
+
+	if(strcmp(argv[1], "None") == 0)
+	{
+		esp_log_level_set("*", ESP_LOG_NONE);
+	}
+	else if(strcmp(argv[1], "Error") == 0)
+	{
+		esp_log_level_set("*", ESP_LOG_ERROR);
+	}
+	else if(strcmp(argv[1], "Warnung") == 0)
+	{
+		esp_log_level_set("*", ESP_LOG_WARN);
+	}
+	else if(strcmp(argv[1], "Info") == 0)
+	{
+		esp_log_level_set("*", ESP_LOG_INFO);
+	}
+	else if(strcmp(argv[1], "DEBUG") == 0)
+	{
+		esp_log_level_set("*", ESP_LOG_DEBUG);
+	}
+	else if(strcmp(argv[1], "All") == 0)
+	{
+		esp_log_level_set("*", ESP_LOG_VERBOSE);
+	}
+	else
+	{
+		return 2;
+	}
+	return 0;
+}
+
 void register_commands(void)
 {
 	//Register OS Commands
@@ -463,4 +508,5 @@ void register_commands(void)
 	esp_console_cmd_register(&reboot_command);
 	esp_console_cmd_register(&shutdown_command);
 	esp_console_cmd_register(&interface_command);
+	esp_console_cmd_register(&debug_command);
 }
