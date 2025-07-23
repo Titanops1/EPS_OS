@@ -51,6 +51,11 @@ void remove_whitespace(char *str) {
 
 static esp_err_t _http_event_handler_version(esp_http_client_event_t *evt) {
 	switch (evt->event_id) {
+		case HTTP_EVENT_ON_CONNECTED:
+			memset(latest_version, 0, sizeof(latest_version));
+			memset(firmware_url, 0, sizeof(firmware_url));
+			memset(firmware_checksum, 0, sizeof(firmware_checksum));
+			break;
 		case HTTP_EVENT_ON_DATA:
 			//printf("HTTP_EVENT_ON_DATA, len=%d\n", evt->data_len);
 			//printf("Empfangene Daten: %.*s\n", evt->data_len, (char*)evt->data);
