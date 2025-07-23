@@ -1,6 +1,7 @@
 #include "ota_update.h"
 #include "esp_http_client.h"
 #include "esp_ota_ops.h"
+#include "esp_timer.h"
 #include "esp_log.h"
 #include "mbedtls/md.h"
 #include "lwip/netdb.h"
@@ -19,16 +20,17 @@ extern const char ca_cert_end[] asm("_binary_ca_cert_pem_end");
 static char response_buffer[512] = {0};
 static int response_len = 0;
 uint32_t file_downlod_size = 0;
+int64_t start_time = 0;
 
 void remove_whitespace(char *str) {
-    char *src = str, *dst = str;
-    while (*src) {
-        if (*src != '\n' && *src != '\t' && *src != '\r') {
-            *dst++ = *src;
-        }
-        src++;
-    }
-    *dst = '\0';
+	char *src = str, *dst = str;
+	while (*src) {
+		if (*src != '\n' && *src != '\t' && *src != '\r') {
+			*dst++ = *src;
+		}
+		src++;
+	}
+	*dst = '\0';
 }
 
 static esp_err_t _http_event_handler_version(esp_http_client_event_t *evt) {
@@ -65,6 +67,11 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 			//printf("HTTP_EVENT_ON_CONNECTED\n");
 			file = fopen(OTA_FILE_PATH, "wb");
 			file_downlod_size = 0;
+
+			int content_length = esp_http_client_fetch_headers(evt->client);
+			printf("Gesamtgröße der Firmware: %d Bytes\n", content_length);
+
+			start_time = esp_timer_get_time();  // Startzeit in µs
 			break;
 		case HTTP_EVENT_ON_DATA:
 			if (!file) {
@@ -86,6 +93,18 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 			if (file) {
 				fclose(file);
 				file = NULL;
+			}
+
+			int64_t end_time = esp_timer_get_time();  // in µs
+			int64_t duration_us = end_time - start_time;
+			float duration_sec = duration_us / 1000000.0;
+
+			if (duration_sec > 0) {
+				float speed_kbps = (file_downlod_size / 1024.0) / duration_sec;
+				printf("Download abgeschlossen: %lu Bytes in %.2f Sekunden\n", file_downlod_size, duration_sec);
+				printf("Durchschnittliche Geschwindigkeit: %.2f KB/s\n", speed_kbps);
+			} else {
+				printf("Download abgeschlossen. Zeitmessung zu kurz oder fehlgeschlagen.\n");
 			}
 			break;
 		case HTTP_EVENT_DISCONNECTED:
@@ -110,19 +129,26 @@ void ota_show_status(void) {
 	esp_ota_img_states_t ota_state;
 
 	if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
-		printf("Firmware-Status: ");
 		if (ota_state == ESP_OTA_IMG_NEW) {
-			printf("Neu installiert und noch nicht bestätigt.\n");
+			ESP_LOGI("OTA_STATE", "Neu installiert und noch nicht bestätigt.\n");
 		} else if (ota_state == ESP_OTA_IMG_VALID) {
-			printf("Läuft normal.\n");
+			ESP_LOGI("OTA_STATE", "Läuft normal.\n");
 		} else if (ota_state == ESP_OTA_IMG_INVALID) {
-			printf("Fehlgeschlagen, Rollback wird ausgeführt.\n");
+			ESP_LOGI("OTA_STATE", "Fehlgeschlagen, Rollback wird ausgeführt.");
 			esp_ota_mark_app_invalid_rollback_and_reboot();
+		} else if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
+			ESP_LOGI("OTA_STATE", "OTA-Status: Pending verify → Versuche zu bestätigen...");
+			if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
+				ESP_LOGI("OTA_STATE", "Firmware erfolgreich als gültig markiert!");
+			} else {
+				ESP_LOGE("OTA_STATE", "Fehler beim Bestätigen der Firmware! Rollback wird ausgelöst.");
+				esp_ota_mark_app_invalid_rollback_and_reboot();
+			}
 		} else {
-			printf("Unbekannter Zustand.\n");
+			ESP_LOGI("OTA_STATE", "Unbekannter Zustand. %d", ota_state);
 		}
 	} else {
-		printf("Konnte OTA-Status nicht abrufen.\n");
+		ESP_LOGE("OTA_STATE", "Konnte OTA-Status nicht auslesen.");
 	}
 }
 

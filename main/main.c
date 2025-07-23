@@ -28,6 +28,7 @@
 #include "http_ota.h"
 #include "systemCalls.h"
 #include "os_commands.h"
+#include "ota_update.h"
 
 #include "pin_def.h"
 #include "../../register_def.h"
@@ -137,28 +138,6 @@ void init_console(void)
 	esp_log_level_set("*", ESP_LOG_ERROR);
 }
 
-
-void check_ota_update_status(void) {
-    const esp_partition_t *running = esp_ota_get_running_partition();
-    esp_ota_img_states_t ota_state;
-
-    if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
-        if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
-            ESP_LOGI("OTA_STATE", "OTA-Status: Pending verify → Versuche zu bestätigen...");
-            if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
-                ESP_LOGI("OTA_STATE", "Firmware erfolgreich als gültig markiert!");
-            } else {
-                ESP_LOGE("OTA_STATE", "Fehler beim Bestätigen der Firmware! Rollback wird ausgelöst.");
-                esp_ota_mark_app_invalid_rollback_and_reboot();
-            }
-        } else {
-            ESP_LOGI("OTA_STATE", "Firmwarestatus: OK (%d)", ota_state);
-        }
-    } else {
-        ESP_LOGE("OTA_STATE", "Konnte OTA-Status nicht auslesen.");
-    }
-}
-
 void app_main(void) {
 	gpio_set_direction (RPI_RST_PIN, GPIO_MODE_OUTPUT);
 	gpio_set_level(RPI_RST_PIN, 0);
@@ -175,8 +154,8 @@ void app_main(void) {
 	ESP_ERROR_CHECK(nvs_flash_init());
 	ESP_ERROR_CHECK(esp_netif_init());
 	ESP_ERROR_CHECK(esp_event_loop_create_default());
-	
-	check_ota_update_status();
+
+	ota_show_status();
 
 	//Initialize NVS
 	esp_err_t ret = nvs_flash_init();

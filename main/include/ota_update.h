@@ -6,6 +6,7 @@
 #define OTA_JSON_URL "https://raw.githubusercontent.com/Titanops1/EPS_OS/main/latest.json"
 #define OTA_FILE_PATH "/spiffs/firmware.bin"
 
+void ota_show_status(void);
 bool ota_check_for_update(void);
 bool ota_download_firmware(const char *url);
 bool ota_verify_checksum(const char *expected_hash);
