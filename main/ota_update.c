@@ -83,7 +83,7 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 			if (evt->data_len > 0) {
 				fwrite(evt->data, 1, evt->data_len, file);
 				file_downlod_size += evt->data_len;
-				printf("File download, size=%ld Byte\n", file_downlod_size);
+				//printf("File download, size=%ld Byte\n", file_downlod_size);
 				//printf("HTTP_EVENT_ON_DATA, len=%d\n", evt->data_len);
 				//printf("Empfangene Daten: %.*s\n", evt->data_len, (char*)evt->data);
 			}
