@@ -10,6 +10,8 @@
 #include <string.h>
 #include "version.h"
 
+#define MAX_URL_LEN 256  // oder mehr, je nach Bedarf
+
 static char latest_version[16];
 static char firmware_url[256];
 static char firmware_checksum[65];
@@ -184,8 +186,10 @@ void ota_show_status(void) {
  * Lädt die JSON-Datei von GitHub und überprüft die Version
  */
 bool ota_check_for_update(void) {
+	char full_url[MAX_URL_LEN];
+	snprintf(full_url, sizeof(full_url), "%s?ts=%lld", OTA_JSON_URL, esp_timer_get_time());
 	esp_http_client_config_t config = {
-		.url = OTA_JSON_URL,
+		.url = full_url,
 		.cert_pem = ca_cert_start,  // CA-Zertifikat
 		//.skip_cert_common_name_check = true,
 		.timeout_ms = 20000,
