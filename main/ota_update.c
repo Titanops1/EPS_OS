@@ -21,6 +21,7 @@ static char response_buffer[512] = {0};
 static int response_len = 0;
 uint32_t file_downlod_size = 0;
 int64_t start_time = 0;
+static int g_firmware_content_length = -1;
 
 void remove_whitespace(char *str) {
 	char *src = str, *dst = str;
@@ -68,8 +69,8 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 			file = fopen(OTA_FILE_PATH, "wb");
 			file_downlod_size = 0;
 
-			int content_length = esp_http_client_fetch_headers(evt->client);
-			printf("Gesamtgröße der Firmware: %d Bytes\n", content_length);
+			// int content_length = esp_http_client_fetch_headers(evt->client);
+			// printf("Gesamtgröße der Firmware: %d Bytes\n", content_length);
 
 			start_time = esp_timer_get_time();  // Startzeit in µs
 			break;
@@ -112,6 +113,12 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 			if (file) {
 				fclose(file);
 				file = NULL;
+			}
+			break;
+		case HTTP_EVENT_ON_HEADER:
+			if (strcasecmp(evt->header_key, "Content-Length") == 0) {
+				g_firmware_content_length = atoi(evt->header_value);
+				printf("Content-Length (Header): %d Bytes\n", g_firmware_content_length);
 			}
 			break;
 		default:
@@ -235,8 +242,14 @@ bool ota_download_firmware(const char *url) {
 	};
 
 	esp_http_client_handle_t client = esp_http_client_init(&config);
-	esp_http_client_perform(client);
+	esp_err_t err = esp_http_client_perform(client);
 
+	if (g_firmware_content_length > 0) {
+		printf("Gesamtgröße der Firmware laut Header: %d Bytes\n", g_firmware_content_length);
+	} else {
+		printf("Content-Length konnte nicht aus Header gelesen werden.\n");
+	}
+	
 	esp_http_client_cleanup(client);
 	return true;
 }
