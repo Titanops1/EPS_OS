@@ -191,6 +191,8 @@ bool ota_check_for_update(void) {
 		.timeout_ms = 20000,
 		.transport_type = HTTP_TRANSPORT_OVER_SSL,  // HTTPS
 		.event_handler = _http_event_handler_version,
+		.disable_auto_redirect = true,
+		.is_async = false,
 	};
 
 	esp_http_client_handle_t client = esp_http_client_init(&config);
