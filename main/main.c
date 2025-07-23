@@ -134,8 +134,6 @@ void init_console(void)
 
 	ESP_ERROR_CHECK(esp_console_start_repl(repl));
 	esp_log_level_set("*", ESP_LOG_NONE);
-	//esp_log_level_set("*", ESP_LOG_VERBOSE);
-	//esp_log_level_set("*", ESP_LOG_ERROR);
 }
 
 void app_main(void) {
