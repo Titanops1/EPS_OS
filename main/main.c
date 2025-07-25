@@ -169,6 +169,8 @@ void app_main(void) {
 	//start_webserver();
 	//mqtt_app_start();
 
+	check_and_update_firmware();
+
 	gpio_set_level(RPI_RST_PIN, 1);
 	rpi_uart_init(0, configMAX_PRIORITIES-1);
 	i2c_init();
