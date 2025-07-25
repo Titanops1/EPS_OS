@@ -39,8 +39,8 @@ esp_console_cmd_t webserver_command = {
 
 esp_console_cmd_t update_command = {
 	.command = "update",
-	.help = "Führt ein Firmware-Update durch",
-	.hint = NULL,
+	.help = "Führt ein Firmware-Update durch.\n-c		Only Check for new Firmware\n-d		Check and Download new Frimware\n-i		Install downloaded Frimware\n",
+	.hint = "<-c -d -i",
 	.func = &update,
 };
 
@@ -169,9 +169,27 @@ int handle_update_server(int argc, char **argv) {
 }
 
 int update(int argc, char **argv) {
-	if(argc == 1) {
-		check_and_update_firmware();
+	int update_arg = 0;
+	if(argc == 1)
+	{ //check, download and install new firmware
+		update_arg = 0;
 	}
+	else
+	{
+		if(strcmp(argv[1], "-c") == 0)
+		{ //only check
+			update_arg = 1;
+		}
+		else if(strcmp(argv[1], "-d") == 0)
+		{ //only check download
+			update_arg = 2;
+		}
+		else if(strcmp(argv[1], "-i") == 0)
+		{ //only install downloaded file
+			update_arg = 3;
+		}
+	}
+	check_and_update_firmware(update_arg);
 	return 0;
 }
 

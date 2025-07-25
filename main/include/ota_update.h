@@ -11,5 +11,5 @@ bool ota_check_for_update(void);
 bool ota_download_firmware(const char *url);
 bool ota_verify_checksum(const char *expected_hash);
 bool ota_perform_update(void);
-void check_and_update_firmware(void);
+void check_and_update_firmware(int arg);
 #endif

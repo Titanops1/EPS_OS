@@ -364,29 +364,75 @@ bool ota_perform_update(void) {
 	return true;
 }
 
-void check_and_update_firmware(void) {
+void check_and_update_firmware(int arg) {
 	printf("Überprüfe aktuellen Firmware-Status...\n");
 	ota_show_status();
 
-	if (ota_check_for_update()) {
-		printf("Firmware wird heruntergeladen...\n");
-		if (ota_download_firmware(firmware_url)) {
-			printf("Überprüfe Checksumme...\n");
-			if (ota_verify_checksum(firmware_checksum)) {
-				printf("Checksumme OK! Starte Update...\n");
-				if (!ota_perform_update()) {
-					printf("Update fehlgeschlagen, Rollback wird ausgeführt.\n");
+	if(arg == 0) //do all
+	{
+		if (ota_check_for_update())
+		{
+			printf("Firmware wird heruntergeladen...\n");
+			if (ota_download_firmware(firmware_url))
+			{
+				printf("Überprüfe Checksumme...\n");
+				if (ota_verify_checksum(firmware_checksum))
+				{
+					printf("Checksumme OK! Starte Update...\n");
+					if (!ota_perform_update())
+					{
+						printf("Update fehlgeschlagen, Rollback wird ausgeführt.\n");
+						remove(OTA_FILE_PATH);  // Firmware-Datei löschen
+					}
+				}
+				else
+				{
+					printf("Fehler: Checksumme falsch! Update abgebrochen.\n");
 					remove(OTA_FILE_PATH);  // Firmware-Datei löschen
 				}
-			} else {
-				printf("Fehler: Checksumme falsch! Update abgebrochen.\n");
+			}
+			else
+			{
+				printf("Fehler beim Download!\n");
 				remove(OTA_FILE_PATH);  // Firmware-Datei löschen
 			}
-		} else {
-			printf("Fehler beim Download!\n");
+		}
+	}
+	else if(arg == 1) //only check
+	{
+		ota_check_for_update();
+	}
+	else if(arg == 2) //only check and download
+	{
+		if (ota_check_for_update())
+		{
+			printf("Firmware wird heruntergeladen...\n");
+			if (ota_download_firmware(firmware_url))
+			{
+				printf("Überprüfe Checksumme...\n");
+				if (ota_verify_checksum(firmware_checksum))
+				{
+					printf("Checksumme OK!\n");
+				}
+				else
+				{
+					printf("Checksumme not OK!\nFile removed!\n");
+					remove(OTA_FILE_PATH);  // Firmware-Datei löschen
+				}
+			}
+			else
+			{
+				printf("Download fehlgeschlagen!\nFile removed!\n");
+				remove(OTA_FILE_PATH);  // Firmware-Datei löschen
+			}
+		}
+	}
+	else if(arg == 3) //instal downloaded file
+	{
+		if (!ota_perform_update())
+		{
+			printf("Update fehlgeschlagen, Rollback wird ausgeführt.\n");
 			remove(OTA_FILE_PATH);  // Firmware-Datei löschen
 		}
-	} else {
-		printf("Keine neue Firmware gefunden.\n");
 	}
 }
