@@ -40,6 +40,22 @@ void print_progress_bar(int current, int total) {
     fflush(stdout);
 }
 
+void printSize(uint32_t size)
+{
+	if(size < 1024)
+	{
+		printf("%ld Byte", size);
+	}
+	else if(size < 1024*1024)
+	{
+		printf("%.2f kByte", (float)(size)/1024.0f);
+	}
+	else
+	{
+		printf("%.2f MByte", (float)(size)/(1024.0f*1024.0f));
+	}
+}
+
 void remove_whitespace(char *str) {
 	char *src = str, *dst = str;
 	while (*src) {
@@ -125,7 +141,9 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 
 			if (duration_sec > 0) {
 				float speed_kbps = (file_downlod_size / 1024.0) / duration_sec;
-				printf("\nDownload abgeschlossen: %lu Bytes in %.2f Sekunden\n", file_downlod_size, duration_sec);
+				printf("\nDownload abgeschlossen: ");
+				printSize(file_downlod_size);
+				printf(" in %.2f Sekunden\n", duration_sec);
 				printf("Durchschnittliche Geschwindigkeit: %.2f KB/s\n", speed_kbps);
 			} else {
 				printf("Download abgeschlossen. Zeitmessung zu kurz oder fehlgeschlagen.\n");
@@ -141,7 +159,9 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 		case HTTP_EVENT_ON_HEADER:
 			if (strcasecmp(evt->header_key, "Content-Length") == 0) {
 				g_firmware_content_length = atoi(evt->header_value);
-				printf("Firmwaregröße: %d Bytes\n", g_firmware_content_length);
+				printf("Firmwaregröße: \n");
+				printSize(g_firmware_content_length);
+				printf("\n");
 			}
 			break;
 		default:
@@ -271,11 +291,13 @@ bool ota_download_firmware(const char *url) {
 	esp_http_client_handle_t client = esp_http_client_init(&config);
 	esp_http_client_perform(client);
 
-	if (g_firmware_content_length > 0) {
-		printf("Gesamtgröße der Firmware: %d Bytes\n", g_firmware_content_length);
-	} else {
-		printf("Gesamtgröße der Firmware konnte nicht aus Header gelesen werden.\n");
-	}
+	// if (g_firmware_content_length > 0) {
+	// 	printf("Gesamtgröße der Firmware: ");
+	// 	printSize(g_firmware_content_length);
+	// 	printf("\n");
+	// } else {
+	// 	printf("Gesamtgröße der Firmware konnte nicht aus Header gelesen werden.\n");
+	// }
 
 	esp_http_client_cleanup(client);
 	return true;
