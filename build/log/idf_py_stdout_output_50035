@@ -3,8 +3,10 @@
 
 {"version": 2, "values": {}, "ranges": {}, "visible": {}}
 
-Set LOG_MAXIMUM_LEVEL_DEBUG
-{"version": 2, "values": {"LOG_MAXIMUM_EQUALS_DEFAULT": false, "LOG_MAXIMUM_LEVEL_DEBUG": true, "LOG_MAXIMUM_LEVEL": 4}, "ranges": {}, "visible": {}}
+Set ESP_MAIN_TASK_STACK_SIZE
+{"version": 2, "values": {"ESP_MAIN_TASK_STACK_SIZE": 4584}, "ranges": {}, "visible": {}}
 
-{"version": 2, "values": {"LOG_MAXIMUM_EQUALS_DEFAULT": true, "LOG_MAXIMUM_LEVEL_DEBUG": false, "LOG_MAXIMUM_LEVEL": 3}, "ranges": {}, "visible": {}}
+{"version": 2, "values": {}, "ranges": {}, "visible": {}}
+
+{"version": 2, "values": {}, "ranges": {}, "visible": {}}
 

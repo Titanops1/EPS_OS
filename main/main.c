@@ -29,11 +29,9 @@
 #include "systemCalls.h"
 #include "os_commands.h"
 #include "ota_update.h"
+#include "vga.h"
 
 #include "pin_def.h"
-#include "../../register_def.h"
-
-#define RPI_RST_PIN GPIO_NUM_23
 
 /*******************
 *I2C SDA=18 SCL=21
@@ -52,6 +50,94 @@ static const char *TAG = "main";
  * CORE 0 Beginn
  * Main Application
 */
+void print_bootscreen()
+{
+	vga_clear_screen(0, 0, 0);  // schwarzer Hintergrund
+
+	// Titel
+	vga_draw_text(10, 2, "ESPOS Operating System", 1, 1, 1);  // weiß
+
+	vga_draw_line(0, 10, 640, 10, 0, 1, 0);
+	vga_draw_line(0, 82, 640, 82, 0, 1, 0);
+
+	// Infos
+	vga_draw_text(2, 18, ">> Initializing subsystems...", 0, 1, 1);
+
+	vga_draw_text(2, 26, ">> PSRAM:", 1, 1, 0);
+
+	char psram_info[64];
+	snprintf(psram_info, sizeof(psram_info), "Total: %d bytes | Free: %d bytes",
+			heap_caps_get_total_size(MALLOC_CAP_SPIRAM),
+			heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+	vga_draw_text(2, 34, psram_info, 1, 1, 1);
+
+	vga_draw_text(2, 42, ">> SPIFFS:", 1, 1, 0);
+	// Du kannst hier aktuelle Infos aus SPIFFS anzeigen, z. B. Partition size
+
+	vga_draw_text(2, 50, ">> Wi-Fi: Connecting...", 1, 1, 0);
+
+	vga_draw_text(2, 58, "Bootloader v1.0 - Build 2025.08", 0, 0, 1);
+	vga_draw_text(2, 66, "RP2040 GPU online", 0, 1, 0);
+	vga_draw_text(2, 74, "ESP32 Host initialized", 0, 1, 0);
+
+	vga_draw_text(10, 90, "Press any key to enter setup", 1, 1, 1);
+}
+
+// Einfacher Himmel + Boden
+void draw_landscape() {
+	// Himmel: Blau
+	vga_fill_rect(0, 0, 320, 60, 0, 0, 1);
+
+	// Boden: Grün
+	vga_fill_rect(0, 60, 320, 60, 0, 1, 0);
+
+	// Sonne: Gelber Kreis
+	vga_fill_circle(280, 20, 10, 1, 1, 0);
+
+	// Baumstamm (braun)
+	for (int y = 80; y < 100; y++) {
+		for (int x = 50; x < 54; x++) {
+			vga_draw_pixel(x, y, 139, 69, 19);
+		}
+	}
+
+	// Baumkrone (grün)
+	for (int y = -8; y <= 0; y++) {
+		for (int x = -8; x <= 8; x++) {
+			if (x*x + y*y <= 64) {
+				vga_draw_pixel(52 + x, 80 + y, 0, 200, 0);
+			}
+		}
+	}
+}
+
+void run_graphics_test() {
+	vga_clear_screen(0, 0, 0);
+
+	// Farbverlauf von oben nach unten (rot)
+	for (int y = 0; y < 480; y += 10) {
+		vga_draw_rect(0, y, 640, 10, y / 2, 0, 0);  // Rotverlauf
+	}
+
+	// Diagonale Linien von links oben nach rechts unten
+	for (int i = 0; i < 640; i += 40) {
+		vga_draw_line(0, 0, i, 479, 0, 255, 0);  // Grün
+	}
+
+	for (int i = 0; i < 480; i += 40) {
+		vga_draw_line(0, 0, 639, i, 0, 255, 0);  // Weitere grüne Linien
+	}
+
+	// Rechtecke in verschiedenen Farben
+	vga_draw_rect(100, 100, 100, 50, 255, 0, 0);   // Rot
+	vga_draw_rect(250, 100, 100, 50, 0, 255, 0);   // Grün
+	vga_draw_rect(400, 100, 100, 50, 0, 0, 255);   // Blau
+
+	// Textanzeige
+	vga_draw_text(20, 300, "VGA Testbild", 255, 255, 255);
+	vga_draw_text(20, 320, "RP2040 GPU Test", 255, 255, 0);
+}
+
 void init_spiffs(void)
 {
 	ESP_LOGI(TAG, "Initializing SPIFFS");
@@ -137,23 +223,24 @@ void init_console(void)
 }
 
 void app_main(void) {
-	gpio_set_direction (RPI_RST_PIN, GPIO_MODE_OUTPUT);
-	gpio_set_level(RPI_RST_PIN, 0);
-	//esp_log_level_set("*", ESP_LOG_INFO);
-	// esp_log_level_set("uart", ESP_LOG_DEBUG);
-	// esp_log_level_set("wifi", ESP_LOG_WARN);
+	gpio_set_direction (RP2040_RST_PIN, GPIO_MODE_OUTPUT);
+	gpio_set_level(RP2040_RST_PIN, 0);
+
 
 	ESP_LOGI(TAG, "[APP] Startup..");
 	ESP_LOGI(TAG, "[APP] Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
 	ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 	ESP_LOGI("PSRAM", "Gesamter PSRAM: %d Bytes", heap_caps_get_total_size(MALLOC_CAP_SPIRAM));
-    ESP_LOGI("PSRAM", "Freier PSRAM: %d Bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+	ESP_LOGI("PSRAM", "Freier PSRAM: %d Bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
 	ESP_ERROR_CHECK(nvs_flash_init());
 	ESP_ERROR_CHECK(esp_netif_init());
 	ESP_ERROR_CHECK(esp_event_loop_create_default());
 
 	ota_show_status();
+
+	gpio_set_level(RP2040_RST_PIN, 1);
+	rpi_uart_init(0, configMAX_PRIORITIES-1);
 
 	//Initialize NVS
 	esp_err_t ret = nvs_flash_init();
@@ -162,26 +249,23 @@ void app_main(void) {
 	  ret = nvs_flash_init();
 	}
 	init_spiffs();
+
 	init_systemcalls();
 	initApps();
 	
 	wifi_init_sta();
-	//start_webserver();
-	//mqtt_app_start();
 
 	check_and_update_firmware(0);
 
-	gpio_set_level(RPI_RST_PIN, 1);
-	rpi_uart_init(0, configMAX_PRIORITIES-1);
+	print_bootscreen();
 	i2c_init();
 	ESP_LOGI(TAG, "[APP] Tasks activated %d", uxTaskGetNumberOfTasks());
 	
+	vTaskDelay(pdMS_TO_TICKS(5000));
+	//run_graphics_test();
+	//draw_landscape();
 	init_console();
 	while (1) {
-		//ESP_LOGI(TAG, "[APP] Tasks activated %d", uxTaskGetNumberOfTasks());
-		// xSemaphoreTake(LedMutex, portMAX_DELAY);
-		// gpio_set_level(B_LED_PIN, 0);
-		// xSemaphoreGive(LedMutex);
 		vTaskDelay(pdMS_TO_TICKS(2000));
 	}
 }

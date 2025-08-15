@@ -8,13 +8,17 @@
 */
 #include "uart_lib.h"
 #include "pin_def.h"
+#include "../../register_def.h"
 
 static const char *TAG = "uart";
 
 #define RPI_UART	UART_NUM_1
 #define MAX_BUFFER_SIZE 512
 
+static SemaphoreHandle_t tx_done_sem = NULL;
+static SemaphoreHandle_t send_mutex;
 uint8_t tx_disable = 0;
+uint8_t hw_flow = 0;
 
 TaskHandle_t UartRxHandle;
 TaskHandle_t UartTxHandle;
@@ -34,7 +38,7 @@ typedef struct {
 
 FifoBuffer txfifo;
 
-uint8_t header[] = {0xff,0xff,0xff,0xfe,0xff,0xfd,0xff,0xfc};
+uint8_t header[8] = {0xff,0xff,0xff,0xfe,0xff,0xfd,0xff,0xfc};
 
 struct uart_rx_data_t
 {
@@ -122,9 +126,19 @@ void rpi_init(void) {
 	uart_driver_install(RPI_UART, MAX_BUFFER_SIZE * 2, 0, 0, NULL, 0);
 	uart_param_config(RPI_UART, &uart_config);
 	uart_set_pin(RPI_UART, RP2040_TX_PIN, RP2040_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+	// Semaphore erstellen (Binär-Semaphore für Sendebestätigung)
+	tx_done_sem = xSemaphoreCreateBinary();
+	send_mutex = xSemaphoreCreateMutex();
 }
 
-void sendRPi(uint16_t reg, uint8_t* data, uint16_t size) {
+void sendRPi(uint16_t reg, uint16_t* data, uint16_t size) {
+	xSemaphoreTake(send_mutex, portMAX_DELAY);
+
+	while (fifo_getSize(&txfifo) > MAX_BUFFER_SIZE - ((size * 2) + 12) || gpio_get_level(UART2_RX_PIN) == 0) {
+		printf("UART: Warte auf Puffer oder CTS HIGH\n");
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	}
+
 	tx_disable = 1;
 	//Send Header
 	for(uint8_t i = 0; i < 8; i++)
@@ -145,6 +159,11 @@ void sendRPi(uint16_t reg, uint8_t* data, uint16_t size) {
 		fifo_push(&txfifo, (data[i]&0xFF)); // Daten in den Puffer legen
 	}
 	tx_disable = 0;
+	// ⏳ Hier warten wir, bis das Senden abgeschlossen wurde
+	if (tx_done_sem) {
+		xSemaphoreTake(tx_done_sem, portMAX_DELAY);
+	}
+	xSemaphoreGive(send_mutex);
 }
 
 /**********************************************************************
@@ -161,6 +180,11 @@ static void tx_task(void *arg)
 			led_count = 0;
 			fifo_copy_to_buffer(&txfifo, outputBuffer, &outputSize);
 			uart_write_bytes(RPI_UART, outputBuffer, outputSize);
+			uart_wait_tx_done(RPI_UART, portMAX_DELAY);
+			// ✅ Senden beendet – Semaphore freigeben
+			if (tx_done_sem) {
+				xSemaphoreGive(tx_done_sem);
+			}
 		}else {
 			vTaskDelay(pdMS_TO_TICKS(10));
 		}
@@ -198,35 +222,66 @@ static void rx_task(void *arg)
 					if(uart_rx_ctrl.ctrl_cnt == 4)
 					{
 						uart_rx.reg = (data[0]<<8) + data[1];
-						//printf("%d\n", uart_rx.reg&0xFF);
+						//printf("Reg: %d\n", uart_rx.reg);
 						uart_rx_ctrl.ctrl_cnt++;
 					}
 					else if(uart_rx_ctrl.ctrl_cnt == 5)
 					{
 						uart_rx.len = (data[0]<<8) + data[1];
-						//printf("%d\n", data_len&0xFF);
+						//printf("Len: %d\n", uart_rx.len);
 						uart_rx_ctrl.ctrl_cnt++;
 					}
 					else if(uart_rx_ctrl.ctrl_cnt == 6)
 					{
 						uart_rx.data[0] = (data[0]<<8) + data[1];
-						for(uint8_t i = 1; i < uart_rx.len-1; i++)
+						//printf("Data[0]: %d\n", uart_rx.data[0]);
+						for(uint8_t i = 1; i < uart_rx.len; i++)
 						{
 							rxBytes = uart_read_bytes(RPI_UART, data, 2, 1000 / portTICK_PERIOD_MS);
 							uart_rx.data[i] = (data[0]<<8) + data[1];
-							//printf("%d\n", data[i]);
+							//printf("Data[%d]: %d\n", i, uart_rx.data[i]);
 						}
 
 						uart_rx_ctrl.ctrl_cnt = 0;
 						uart_rx_ctrl.complete = 1;
+						gpio_set_level(UART2_TX_PIN, 0);
 					}
 				}
 			}
-			ESP_LOGI(TAG, "Read %d bytes: '%s'", rxBytes, data);
-			ESP_LOG_BUFFER_HEXDUMP(TAG, data, rxBytes, ESP_LOG_INFO);
-		}else {
-			vTaskDelay(pdMS_TO_TICKS(10));
+			//ESP_LOGI(TAG, "Read %d bytes: '%s'", rxBytes, data);
+			//ESP_LOG_BUFFER_HEXDUMP(TAG, data, rxBytes, ESP_LOG_INFO);
 		}
+	}
+}
+
+uint8_t getRxComplete(void)
+{
+	return uart_rx_ctrl.complete;
+}
+
+void clearRxComplete(void)
+{
+	uart_rx_ctrl.complete = 0;
+	gpio_set_level(UART2_TX_PIN, 1);
+}
+
+uint16_t getRxReg(void)
+{
+	return uart_rx.reg;
+}
+
+uint16_t getRxLen(void)
+{
+	return uart_rx.len;
+}
+
+uint16_t getRxData(uint8_t index)
+{
+	if (index < uart_rx.len) {
+		return uart_rx.data[index];
+	} else {
+		// Handle out-of-bounds access
+		return 0; // Oder einen Fehlerwert
 	}
 }
 
@@ -250,11 +305,14 @@ void rpi_uart_init(uint8_t core_num, uint8_t priority)
 {
 	gpio_set_direction (YELLOW_LED_PIN, GPIO_MODE_OUTPUT);
 	gpio_set_level(YELLOW_LED_PIN, 0);
+
+	gpio_set_direction (UART2_TX_PIN, GPIO_MODE_OUTPUT);
+	gpio_set_direction (UART2_RX_PIN, GPIO_MODE_INPUT);
 	if(priority == 0) {
 		priority = configMAX_PRIORITIES-1;
 	}
 	rpi_init();
-	xTaskCreatePinnedToCore(rx_task, "uart_rx_task", 1024*2, NULL, priority, UartRxHandle, core_num);
+	xTaskCreatePinnedToCore(rx_task, "uart_rx_task", 1024*4, NULL, priority, UartRxHandle, core_num);
 	xTaskCreatePinnedToCore(tx_task, "uart_tx_task", 1024*4, NULL, priority, UartTxHandle, core_num);
 	xTaskCreatePinnedToCore(rxtx_task, "led_rxtx_task", 1024, NULL, priority-1, LedRxTxHandle, core_num);
 }

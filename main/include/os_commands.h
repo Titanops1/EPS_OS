@@ -24,4 +24,6 @@ int cmd_reboot(int argc, char **argv);
 int cmd_shutdown(int argc, char **argv);
 int interface_cmd(int argc, char **argv);
 int debug_cmd(int argc, char **argv);
+int gpio_cmd(int argc, char **argv);
+int vga_cmd(int argc, char **argv);
 void register_commands(void);

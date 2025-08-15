@@ -5,6 +5,8 @@
 #include "http_ota.h"
 #include "ota_update.h"
 #include "systemCalls.h"
+#include "pin_def.h"
+#include "vga.h"
 #include "version.h"
 
 #include <freertos/FreeRTOS.h>
@@ -23,6 +25,16 @@
 #include <stdio.h>      // Für printf() und perror()
 #include <dirent.h> 
 
+#include "../../register_def.h"
+
+// Struktur zur Verwaltung laufender Apps
+typedef struct {
+	uint8_t io;              // Input/Output des GPIOs
+	uint8_t state;           // State des GPIOs
+} GPIO_t;
+
+GPIO_t Gpio[32];
+
 esp_console_cmd_t version_command = {
 	.command = "version",
 	.help = "Zeigt die Version des ESP32 OS",
@@ -40,7 +52,7 @@ esp_console_cmd_t webserver_command = {
 esp_console_cmd_t update_command = {
 	.command = "update",
 	.help = "Führt ein Firmware-Update durch.\n-c		Only Check for new Firmware\n-d		Check and Download new Frimware\n-i		Install downloaded Frimware\n",
-	.hint = "<-c -d -i",
+	.hint = "<-c -d -i>",
 	.func = &update,
 };
 
@@ -147,6 +159,20 @@ esp_console_cmd_t debug_command = {
 	.help = "Konfiguriert die Debug-Ausgabe",
 	.hint = "<None Error Warnung Info Debug All>",
 	.func = &debug_cmd,
+};
+
+esp_console_cmd_t gpio_command = {
+	.command = "gpio",
+	.help = "Steuert die gpios",
+	.hint = "<set get> <Pin IO State>",
+	.func = &gpio_cmd,
+};
+
+esp_console_cmd_t vga_command = {
+	.command = "vga",
+	.help = "Steuert die VGA Schnittstelle",
+	.hint = "Usage: vga <clear line rect fillrect text circle fillcircle triangle filltriangle> <x y x1 y1 x2 y2> <r g b> <text>",
+	.func = &vga_cmd,
 };
 
 // Handler für den "version"-Befehl
@@ -422,31 +448,49 @@ int cmd_wifi_forget(int argc, char **argv) {
 }
 
 int cmd_reboot(int argc, char **argv) {
+	uint8_t buf[3];
+	buf[0] = CMD_REBOOT; //reboot
+	sendRPi(REG_POWER, &buf, 1);
+	delay_ms(10);
+	printf("System wird neu gestartet\n");
 	esp_restart();
 	return 0;
 }
 
 int cmd_shutdown(int argc, char **argv) {
+	uint8_t buf[3];
+
 	if(argc < 3) {
 		printf("Usage: shutdown <-r -h> <time>\n");
 		return 1;
 	}
 	if(strcmp(argv[1], "-r") == 0) {
+		buf[0] = CMD_REBOOT; //reboot
+		sendRPi(REG_POWER, &buf, 1);
 		if(strcmp(argv[2], "now") == 0) {
 			printf("System wird neu gestartet\n");
+			delay_ms(10);
 			esp_restart();
 		}else {
 			printf("System wird in %d Sekunden neu gestartet\n", atoi(argv[2]));
+			delay_ms(10);
 			vTaskDelay(pdMS_TO_TICKS(atoi(argv[2])*1000));
 			esp_restart();
 		}
 	} else if(strcmp(argv[1], "-h") == 0) {
+		buf[0] = CMD_SHUTDOWN; //shutdown
+		sendRPi(REG_POWER, &buf, 1);
 		if(strcmp(argv[2], "now") == 0) {
 			printf("System wird heruntergefahren\n");
+			//gpio_set_level(RP2040_RST_PIN, 0);
+			delay_ms(10);
+			esp_sleep_enable_timer_wakeup((uint64_t)(281474976710656)); // ~8,9 Jahre
 			esp_deep_sleep_start();
 		}else {
 			printf("System wird in %d Sekunden heruntergefahren\n", atoi(argv[2]));
 			vTaskDelay(pdMS_TO_TICKS(atoi(argv[2])*1000));
+			//gpio_set_level(RP2040_RST_PIN, 0);
+			delay_ms(10);
 			esp_sleep_enable_timer_wakeup((uint64_t)(281474976710656)); // ~8,9 Jahre
 			esp_deep_sleep_start();
 		}
@@ -490,13 +534,220 @@ int debug_cmd(int argc, char **argv)
 	{
 		esp_log_level_set("*", ESP_LOG_INFO);
 	}
-	else if(strcmp(argv[1], "DEBUG") == 0)
+	else if(strcmp(argv[1], "Debug") == 0)
 	{
 		esp_log_level_set("*", ESP_LOG_DEBUG);
 	}
 	else if(strcmp(argv[1], "All") == 0)
 	{
 		esp_log_level_set("*", ESP_LOG_VERBOSE);
+	}
+	else
+	{
+		return 2;
+	}
+	return 0;
+}
+
+int gpio_cmd(int argc, char **argv)
+{
+	uint16_t timeout_cnt = 0;
+	if(argc < 2) {
+		printf("Usage: gpio <set get> Pin IO State\n");
+		return 1;
+	}
+
+	if(strcmp(argv[1], "set") == 0)
+	{
+		uint8_t buf[4];
+		uint8_t pin = atoi(argv[2]);
+		Gpio[pin].io = atoi(argv[3]);
+		Gpio[pin].state = atoi(argv[4]);
+		buf[0] = 1; //Set GPIO
+		buf[1] = pin;
+		buf[2] = Gpio[pin].io;
+		buf[3] = Gpio[pin].state;
+		sendRPi(REG_GPIO, &buf, 4);
+	}
+	else if(strcmp(argv[1], "get") == 0)
+	{
+		uint16_t buf[2];
+		uint8_t pin = atoi(argv[2]);
+		buf[0] = 0; //Get GPIO
+		buf[1] = pin;
+		sendRPi(REG_GPIO, &buf, 2);
+		while(getRxComplete() != 1 && timeout_cnt < 1000)
+		{
+			timeout_cnt++;
+			delay_ms(10);
+		}
+		if(getRxComplete() == 1)
+		{
+			if(getRxReg() == REG_GPIO && getRxData(0) == 0)
+			{
+				printf("GPIO%d: %d\n", pin, getRxData(1));
+				clearRxComplete();
+			}
+		}
+		else
+		{
+			printf("No Data received\n");
+		}
+	}
+	else
+	{
+		return 2;
+	}
+	return 0;
+}
+
+int vga_cmd(int argc, char **argv)
+{
+	if(argc < 2) {
+		printf("Usage: vga <clear line rect fillrect text circle fillcircle triangle filltriangle> <x y x1 y1 x2 y2> <r g b> <text>\n");
+		return 1;
+	}
+
+	if(strcmp(argv[1], "clear") == 0)
+	{
+		if(argc < 5)
+		{
+			printf("vga clear <r g b>\n");
+			return 1;
+		}
+		uint8_t r = atoi(argv[2]);
+		uint8_t g = atoi(argv[3]);
+		uint8_t b = atoi(argv[4]);
+		vga_clear_screen(r, g, b);
+	}
+	else if(strcmp(argv[1], "line") == 0)
+	{
+		if(argc < 9)
+		{
+			printf("vga line <x0 y0 x1 y1> <r g b>\n");
+			return 1;
+		}
+		uint16_t x0 = atoi(argv[2]);
+		uint16_t y0 = atoi(argv[3]);
+		uint16_t x1 = atoi(argv[4]);
+		uint16_t y1 = atoi(argv[5]);
+		uint8_t r = atoi(argv[6]);
+		uint8_t g = atoi(argv[7]);
+		uint8_t b = atoi(argv[8]);
+		vga_draw_line(x0, y0, x1, y1, r, g, b);
+	}
+	else if(strcmp(argv[1], "rect") == 0)
+	{
+		if(argc < 9)
+		{
+			printf("vga rect <x y w h> <r g b>\n");
+			return 1;
+		}
+		uint16_t x0 = atoi(argv[2]);
+		uint16_t y0 = atoi(argv[3]);
+		uint16_t w = atoi(argv[4]);
+		uint16_t h = atoi(argv[5]);
+		uint8_t r = atoi(argv[6]);
+		uint8_t g = atoi(argv[7]);
+		uint8_t b = atoi(argv[8]);
+		vga_draw_rect(x0, y0, w, h, r, g, b);
+	}
+	else if(strcmp(argv[1], "fillrect") == 0)
+	{
+		if(argc < 9)
+		{
+			printf("vga fillrect <x y w h> <r g b>\n");
+			return 1;
+		}
+		uint16_t x0 = atoi(argv[2]);
+		uint16_t y0 = atoi(argv[3]);
+		uint16_t x1 = atoi(argv[4]);
+		uint16_t y1 = atoi(argv[5]);
+		uint8_t r = atoi(argv[6]);
+		uint8_t g = atoi(argv[7]);
+		uint8_t b = atoi(argv[8]);
+		vga_fill_rect(x0, y0, x1, y1, r, g, b);
+	}
+	else if(strcmp(argv[1], "text") == 0)
+	{
+		if(argc < 8)
+		{
+			printf("vga text <x y> <text> <r g b>\n");
+			return 1;
+		}
+		uint16_t x0 = atoi(argv[2]);
+		uint16_t y0 = atoi(argv[3]);
+		char *text = argv[4];
+		uint8_t r = atoi(argv[5]);
+		uint8_t g = atoi(argv[6]);
+		uint8_t b = atoi(argv[7]);
+		vga_draw_text(x0, y0, text, r, g, b);
+	}
+	else if(strcmp(argv[1], "circle") == 0)
+	{
+		if(argc < 8)
+		{
+			printf("vga circle <x y r> <r g b>\n");
+			return 1;
+		}
+		uint16_t x = atoi(argv[2]);
+		uint16_t y = atoi(argv[3]);
+		uint16_t radius = atoi(argv[4]);
+		uint8_t r = atoi(argv[5]);
+		uint8_t g = atoi(argv[6]);
+		uint8_t b = atoi(argv[7]);
+		vga_draw_circle(x, y, radius, r, g, b);
+	}
+	else if(strcmp(argv[1], "fillcircle") == 0)
+	{
+		if(argc < 8)
+		{
+			printf("vga fillcircle <x y r> <r g b>\n");
+			return 1;
+		}
+		uint16_t x = atoi(argv[2]);
+		uint16_t y = atoi(argv[3]);
+		uint16_t radius = atoi(argv[4]);
+		uint8_t r = atoi(argv[5]);
+		uint8_t g = atoi(argv[6]);
+		uint8_t b = atoi(argv[7]);
+		vga_fill_circle(x, y, radius, r, g, b);
+	}
+	else if(strcmp(argv[1], "triangle") == 0)
+	{
+		if(argc < 11)
+		{
+			printf("vga triangle <x0 y0 x1 y1 x2 y2> <r g b>\n");
+			return 1;
+		}
+		uint16_t x0 = atoi(argv[2]);
+		uint16_t y0 = atoi(argv[3]);
+		uint16_t x1 = atoi(argv[4]);
+		uint16_t y1 = atoi(argv[5]);
+		uint16_t x2 = atoi(argv[6]);
+		uint16_t y2 = atoi(argv[7]);
+		uint8_t r = atoi(argv[8]);
+		uint8_t g = atoi(argv[9]);
+		uint8_t b = atoi(argv[10]);
+		vga_draw_triangle(x0, y0, x1, y1, x2, y2, r, g, b);
+	}
+	else if(strcmp(argv[1], "filltriangle") == 0)
+	{
+		if(argc < 11)
+		{
+			printf("vga filltriangle <x0 y0 x1 y1 x2 y2> <r g b>\n");
+			return 1;
+		}
+		uint16_t x0 = atoi(argv[2]);
+		uint16_t y0 = atoi(argv[3]);
+		uint16_t x1 = atoi(argv[4]);
+		uint16_t y1 = atoi(argv[5]);
+		uint16_t x2 = atoi(argv[6]);
+		uint16_t y2 = atoi(argv[7]);
+		uint8_t r = atoi(argv[8]);
+		uint8_t g = atoi(argv[9]);
+		uint8_t b = atoi(argv[10]);
+		vga_fill_triangle(x0, y0, x1, y1, x2, y2, r, g, b);
 	}
 	else
 	{
@@ -527,4 +778,6 @@ void register_commands(void)
 	esp_console_cmd_register(&shutdown_command);
 	esp_console_cmd_register(&interface_command);
 	esp_console_cmd_register(&debug_command);
+	esp_console_cmd_register(&gpio_command);
+	esp_console_cmd_register(&vga_command);
 }

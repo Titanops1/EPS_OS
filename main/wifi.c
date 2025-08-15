@@ -18,6 +18,7 @@ typedef struct {
 	uint8_t wifi_reconnect;
 	uint16_t ap_count;
 	wifi_ap_record_t ap_info[CONFIG_ESP_WIFI_MAX_AP];
+	uint8_t sntp_is_init;
 } wifi_handle_t;
 
 wifi_handle_t wifi_handle;
@@ -143,18 +144,18 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 		topic[event->topic_len] = '\0';
 
 		//compare Topic
-		if(strcmp(topic, "desktop/distance") == 0)
-		{ //String Identisch
-			uint8_t buffer[1];
-			buffer[0] = atoi(event->data);
-			sendRPi(REG_DIST, &buffer, 1);
-		}
-		else if(strcmp(topic, "can/light") == 0)
-		{ //String Identisch
-			uint8_t buffer[1];
-			buffer[0] = atoi(event->data);
-			sendRPi(REG_LIGHT, &buffer, 1);
-		}
+		// if(strcmp(topic, "desktop/distance") == 0)
+		// { //String Identisch
+		// 	uint8_t buffer[1];
+		// 	buffer[0] = atoi(event->data);
+		// 	sendRPi(REG_DIST, &buffer, 1);
+		// }
+		// else if(strcmp(topic, "can/light") == 0)
+		// { //String Identisch
+		// 	uint8_t buffer[1];
+		// 	buffer[0] = atoi(event->data);
+		// 	sendRPi(REG_LIGHT, &buffer, 1);
+		// }
 		// else if(strcmp(topic, "keepAlive") == 0)
 		// { //String Identisch
 		// 	//uint8_t buffer[1];
@@ -475,28 +476,36 @@ void wifi_init_sta(void)
 }
 
 void obtain_time(void) {
-    printf("Synchronizing time with NTP...\n");
+	if(wifi_handle.sntp_is_init == 0)
+	{
+		printf("Synchronizing time with NTP...\n");
 
-    sntp_setoperatingmode(SNTP_OPMODE_POLL);
-    sntp_setservername(0, "pool.ntp.org");  // Standard-NTP-Server
-    sntp_init();
+		sntp_setoperatingmode(SNTP_OPMODE_POLL);
+		sntp_setservername(0, "pool.ntp.org");  // Standard-NTP-Server
+		sntp_init();
 
-    // Warten, bis Zeit synchronisiert ist
-    time_t now = 0;
-    struct tm timeinfo = { 0 };
-    int retry = 0;
-    const int max_retries = 15;
+		// Warten, bis Zeit synchronisiert ist
+		time_t now = 0;
+		struct tm timeinfo = { 0 };
+		int retry = 0;
+		const int max_retries = 15;
 
-    while (timeinfo.tm_year < (2020 - 1900) && ++retry < max_retries) {
-        printf("Waiting for system time to be set... (%d/%d)\n", retry, max_retries);
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
-        time(&now);
-        localtime_r(&now, &timeinfo);
-    }
+		while (timeinfo.tm_year < (2020 - 1900) && ++retry < max_retries) {
+			printf("Waiting for system time to be set... (%d/%d)\n", retry, max_retries);
+			vTaskDelay(2000 / portTICK_PERIOD_MS);
+			time(&now);
+			localtime_r(&now, &timeinfo);
+		}
 
-    if (retry >= max_retries) {
-        printf("Failed to get NTP time.\n");
-    } else {
-        printf("Time synchronized: %s", asctime(&timeinfo));
-    }
+		if (retry >= max_retries) {
+			printf("Failed to get NTP time.\n");
+		} else {
+			printf("Time synchronized: %s", asctime(&timeinfo));
+		}
+		wifi_handle.sntp_is_init = 1;
+	}
+	else
+	{
+		printf("NTP already initialized!\n");
+	}
 }
