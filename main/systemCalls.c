@@ -11,6 +11,7 @@
 
 #include "i2c_lib.h"
 #include "pin_def.h"
+#include "vga.h"
 
 // Logging-Tag zur Identifikation von Log-Ausgaben
 static const char *TAG = "APP LOADER";
@@ -29,7 +30,7 @@ uint8_t SysLedMode = SYS_LED_HEARTBEAT;
 TaskHandle_t SysLed;  // Task-Handle für die LED-Steuerung
 
 // Maximale Anzahl an Apps, die gleichzeitig geladen werden können
-#define MAX_APPS 10
+#define MAX_APPS 200
 
 // Struktur zur Verwaltung laufender Apps
 typedef struct {
@@ -55,7 +56,7 @@ uint16_t AppCount = 0;     // Gesamtanzahl geladener Apps
 // Maximale Nachrichtenlänge in der IPC-Queue
 #define IPC_MSG_MAX_LEN 64
 // Maximale Länge eines Queue-Namens
-#define MAX_QUEUE_NAME_LEN 16
+#define MAX_QUEUE_NAME_LEN 128
 
 // Struktur zur Verwaltung einer IPC-Queue
 typedef struct {
@@ -91,6 +92,22 @@ const struct esp_elfsym elf_symbols[] = {
 	ESP_ELFSYM_EXPORT(sys_closequeue),
 	ESP_ELFSYM_EXPORT(sys_sendmsg),
 	ESP_ELFSYM_EXPORT(sys_recvmsg),
+
+	//VGA Support
+	ESP_ELFSYM_EXPORT(vga_getWindowWidth),
+	ESP_ELFSYM_EXPORT(vga_getWindowHeigth),
+	ESP_ELFSYM_EXPORT(vga_get_frame_size),
+	ESP_ELFSYM_EXPORT(vga_draw_pixel),
+	ESP_ELFSYM_EXPORT(vga_draw_line),
+	ESP_ELFSYM_EXPORT(vga_draw_rect),
+	ESP_ELFSYM_EXPORT(vga_fill_rect),
+	ESP_ELFSYM_EXPORT(vga_clear_screen),
+	ESP_ELFSYM_EXPORT(vga_draw_circle),
+	ESP_ELFSYM_EXPORT(vga_fill_circle),
+	ESP_ELFSYM_EXPORT(vga_draw_text),
+	ESP_ELFSYM_EXPORT(vga_draw_triangle),
+	ESP_ELFSYM_EXPORT(vga_fill_triangle),
+	ESP_ELFSYM_EXPORT(vga_swap_buffers),
 	ESP_ELFSYM_END
 };
 
@@ -443,6 +460,71 @@ int unregisterApp(const char *appname) {
 		if(strcmp(Apps[i].name, appname) == 0)
 		{
 			close_app(i);
+			ESP_LOGI(TAG, "App %s wurde entfernt", appname);
+			return 1;
+		}
+	}
+	ESP_LOGE(TAG, "App %s nicht gefunden", appname);
+	return -1;
+}
+
+int registerSysApp(void *func, const char *appname)
+{
+	uint8_t skip_search = 0;
+	char filename[128];
+
+	//Check if App is already registered
+	int16_t check = checkAppRegister(appname);
+	if(check > -1)
+	{
+		ESP_LOGI(TAG, "App %s bereits registriert, wird neu geladen", appname);
+		AppStartCount = check;
+		skip_search = 1;
+	}
+	else if(check == -2)
+	{
+		ESP_LOGE(TAG, "App %s bereits registriert", appname);
+		return -3;
+	}
+
+	//Search for free App Slot
+	if(skip_search == 0)
+	{
+		AppStartCount = findFreeAppSlot();
+		ESP_LOGI(TAG, "App Slot %d ist frei", AppStartCount);
+	}
+
+	if(AppStartCount == -1)
+	{
+		ESP_LOGE(TAG, "Kein freier App Slot gefunden");
+		return -2;
+	}
+
+	//Load App
+	//Apps[AppStartCount].name = appname;
+	Apps[AppStartCount].name = heap_caps_malloc(strlen(appname) + 1, MALLOC_CAP_SPIRAM);
+	strcpy(Apps[AppStartCount].name, appname);
+	Apps[AppStartCount].exec_mem = 0;
+	Apps[AppStartCount].mem_size = 0;
+	Apps[AppStartCount].running = 1;
+	xTaskCreate(func, Apps[AppStartCount].name, 4096, NULL, 5, &Apps[AppStartCount].AppHandle);
+	ESP_LOGI(TAG, "System App %s registriert", appname);
+	return 1;
+}
+
+int unregisterSysApp(const char *appname) {
+	for(uint16_t i = 0; i < MAX_APPS; i++)
+	{
+		if(strcmp(Apps[i].name, appname) == 0)
+		{
+			// Freigabe des Namens-Speichers der App
+			heap_caps_free(Apps[i].name);
+			// Lösche den aktuellen Task (da die App beendet wurde)
+			vTaskDelete(Apps[i].AppHandle);
+			Apps[i].AppHandle = NULL;
+			Apps[i].mem_size = 0;
+			Apps[i].exec_mem = NULL;
+
 			ESP_LOGI(TAG, "App %s wurde entfernt", appname);
 			return 1;
 		}

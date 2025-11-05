@@ -15,6 +15,7 @@ static const char *TAG = "uart";
 #define RPI_UART	UART_NUM_1
 #define MAX_BUFFER_SIZE 512
 
+
 static SemaphoreHandle_t tx_done_sem = NULL;
 static SemaphoreHandle_t send_mutex;
 uint8_t tx_disable = 0;
@@ -197,7 +198,7 @@ static void tx_task(void *arg)
 static void rx_task(void *arg)
 {
 	int rxBytes = 0;
-	uint8_t data[MAX_BUFFER_SIZE];
+	uint8_t data[2];
 
 	while (1) {
 		rxBytes = uart_read_bytes(RPI_UART, data, 2, 1000 / portTICK_PERIOD_MS);
@@ -248,8 +249,8 @@ static void rx_task(void *arg)
 					}
 				}
 			}
-			//ESP_LOGI(TAG, "Read %d bytes: '%s'", rxBytes, data);
-			//ESP_LOG_BUFFER_HEXDUMP(TAG, data, rxBytes, ESP_LOG_INFO);
+			// ESP_LOGI(TAG, "Read %d bytes: '%s'", rxBytes, data);
+			// ESP_LOG_BUFFER_HEXDUMP(TAG, data, rxBytes, ESP_LOG_INFO);
 		}
 	}
 }
@@ -308,6 +309,7 @@ void rpi_uart_init(uint8_t core_num, uint8_t priority)
 
 	gpio_set_direction (UART2_TX_PIN, GPIO_MODE_OUTPUT);
 	gpio_set_direction (UART2_RX_PIN, GPIO_MODE_INPUT);
+	gpio_set_level(UART2_TX_PIN, 1);
 	if(priority == 0) {
 		priority = configMAX_PRIORITIES-1;
 	}

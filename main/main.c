@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <math.h>
 
 #include <driver/gpio.h>
 
@@ -22,6 +23,7 @@
 #include "nvs_flash.h"
 #include "esp_spiffs.h"
 
+#include "shell.h"
 #include "wifi.h"
 #include "uart_lib.h"
 #include "i2c_lib.h"
@@ -30,8 +32,10 @@
 #include "os_commands.h"
 #include "ota_update.h"
 #include "vga.h"
+#include "window_manager.h"
 
 #include "pin_def.h"
+#include "../../register_def.h"
 
 /*******************
 *I2C SDA=18 SCL=21
@@ -46,99 +50,53 @@
 
 static const char *TAG = "main";
 
+TaskHandle_t init_spiffs_handle;
+
 /****************************************
  * CORE 0 Beginn
  * Main Application
 */
-void print_bootscreen()
-{
-	vga_clear_screen(0, 0, 0);  // schwarzer Hintergrund
 
-	// Titel
-	vga_draw_text(10, 2, "ESPOS Operating System", 1, 1, 1);  // weiß
+void boot_logo_animation_dynamic() {
+	#define FPS_BOOT	20
+	#define BOOT_TIME	5000 //in ms
+	uint16_t time_cnt = 0;
+	uint8_t frame = 0;
+	int x = vga_getWindowWidth()/2;
+	int y = vga_getWindowHeigth()/2;
 
-	vga_draw_line(0, 10, 640, 10, 0, 1, 0);
-	vga_draw_line(0, 82, 640, 82, 0, 1, 0);
+	while(time_cnt < BOOT_TIME/(1000/FPS_BOOT)) {
+		vga_clear_screen(0,0,0);  // schwarzer Hintergrund
 
-	// Infos
-	vga_draw_text(2, 18, ">> Initializing subsystems...", 0, 1, 1);
+		// Pulsierender Kreis als Logo
+		int radius = 20 + (frame % 20);  // Radius zwischen 20..39
+		vga_fill_circle(x, y, radius, 255, 0, 0);
 
-	vga_draw_text(2, 26, ">> PSRAM:", 1, 1, 0);
+		// Drehendes Dreieck
+		float angle = (frame * 0.1f);
+		int x1 = x + 30*cosf(angle);
+		int y1 = y + 30*sinf(angle);
+		int x2 = x + 30*cosf(angle + 2.09f);
+		int y2 = y + 30*sinf(angle + 2.09f);
+		int x3 = x + 30*cosf(angle + 4.18f);
+		int y3 = y + 30*sinf(angle + 4.18f);
+		vga_fill_triangle(x1, y1, x2, y2, x3, y3, 0, 255, 0);
 
-	char psram_info[64];
-	snprintf(psram_info, sizeof(psram_info), "Total: %d bytes | Free: %d bytes",
-			heap_caps_get_total_size(MALLOC_CAP_SPIRAM),
-			heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-	vga_draw_text(2, 34, psram_info, 1, 1, 1);
+		// Pulsierendes Rechteck
+		int w = 50 + (frame % 15);
+		int h = 30 + (frame % 15);
+		vga_fill_rect(x-w/2, y+h/2, w, h, 0, 0, 255);
 
-	vga_draw_text(2, 42, ">> SPIFFS:", 1, 1, 0);
-	// Du kannst hier aktuelle Infos aus SPIFFS anzeigen, z. B. Partition size
+		// Buffer swap
+		vga_swap_buffers();
 
-	vga_draw_text(2, 50, ">> Wi-Fi: Connecting...", 1, 1, 0);
-
-	vga_draw_text(2, 58, "Bootloader v1.0 - Build 2025.08", 0, 0, 1);
-	vga_draw_text(2, 66, "RP2040 GPU online", 0, 1, 0);
-	vga_draw_text(2, 74, "ESP32 Host initialized", 0, 1, 0);
-
-	vga_draw_text(10, 90, "Press any key to enter setup", 1, 1, 1);
-}
-
-// Einfacher Himmel + Boden
-void draw_landscape() {
-	// Himmel: Blau
-	vga_fill_rect(0, 0, 320, 60, 0, 0, 1);
-
-	// Boden: Grün
-	vga_fill_rect(0, 60, 320, 60, 0, 1, 0);
-
-	// Sonne: Gelber Kreis
-	vga_fill_circle(280, 20, 10, 1, 1, 0);
-
-	// Baumstamm (braun)
-	for (int y = 80; y < 100; y++) {
-		for (int x = 50; x < 54; x++) {
-			vga_draw_pixel(x, y, 139, 69, 19);
-		}
-	}
-
-	// Baumkrone (grün)
-	for (int y = -8; y <= 0; y++) {
-		for (int x = -8; x <= 8; x++) {
-			if (x*x + y*y <= 64) {
-				vga_draw_pixel(52 + x, 80 + y, 0, 200, 0);
-			}
-		}
+		frame++;
+		vTaskDelay(pdMS_TO_TICKS(1000/FPS_BOOT));  // 20 FPS
+		time_cnt++;
 	}
 }
 
-void run_graphics_test() {
-	vga_clear_screen(0, 0, 0);
-
-	// Farbverlauf von oben nach unten (rot)
-	for (int y = 0; y < 480; y += 10) {
-		vga_draw_rect(0, y, 640, 10, y / 2, 0, 0);  // Rotverlauf
-	}
-
-	// Diagonale Linien von links oben nach rechts unten
-	for (int i = 0; i < 640; i += 40) {
-		vga_draw_line(0, 0, i, 479, 0, 255, 0);  // Grün
-	}
-
-	for (int i = 0; i < 480; i += 40) {
-		vga_draw_line(0, 0, 639, i, 0, 255, 0);  // Weitere grüne Linien
-	}
-
-	// Rechtecke in verschiedenen Farben
-	vga_draw_rect(100, 100, 100, 50, 255, 0, 0);   // Rot
-	vga_draw_rect(250, 100, 100, 50, 0, 255, 0);   // Grün
-	vga_draw_rect(400, 100, 100, 50, 0, 0, 255);   // Blau
-
-	// Textanzeige
-	vga_draw_text(20, 300, "VGA Testbild", 255, 255, 255);
-	vga_draw_text(20, 320, "RP2040 GPU Test", 255, 255, 0);
-}
-
-void init_spiffs(void)
+void init_spiffs(void *arg)
 {
 	ESP_LOGI(TAG, "Initializing SPIFFS");
 
@@ -160,6 +118,8 @@ void init_spiffs(void)
 		} else {
 			ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
 		}
+		init_spiffs_handle = NULL;
+		vTaskDelete(NULL);
 		return;
 	}
 
@@ -167,6 +127,8 @@ void init_spiffs(void)
 	ret = esp_spiffs_check(conf.partition_label);
 	if (ret != ESP_OK) {
 		ESP_LOGE(TAG, "SPIFFS_check() failed (%s)", esp_err_to_name(ret));
+		init_spiffs_handle = NULL;
+		vTaskDelete(NULL);
 		return;
 	} else {
 		ESP_LOGI(TAG, "SPIFFS_check() successful");
@@ -177,9 +139,14 @@ void init_spiffs(void)
 	if (ret != ESP_OK) {
 		ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s). Formatting...", esp_err_to_name(ret));
 		esp_spiffs_format(conf.partition_label);
+		init_spiffs_handle = NULL;
+		vTaskDelete(NULL);
 		return;
 	} else {
 		ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
+		char spiffs_info[64];
+		snprintf(spiffs_info, sizeof(spiffs_info), "Total: %d bytes | Used: %d bytes", total, used);
+		drawText(spiffs_info, 1, 1, 1);
 	}
 
 	// Check consistency of reported partiton size info.
@@ -190,39 +157,26 @@ void init_spiffs(void)
 		// More info at https://github.com/pellepl/spiffs/wiki/FAQ#powerlosses-contd-when-should-i-run-spiffs_check
 		if (ret != ESP_OK) {
 			ESP_LOGE(TAG, "SPIFFS_check() failed (%s)", esp_err_to_name(ret));
+			init_spiffs_handle = NULL;
+			vTaskDelete(NULL);
 			return;
 		} else {
 			ESP_LOGI(TAG, "SPIFFS_check() successful");
 		}
 	}
+	init_spiffs_handle = NULL;
+	vTaskDelete(NULL);
 }
 
 void init_console(void)
 {
-	//#define PROMPT_STR CONFIG_IDF_TARGET
-
-	esp_console_repl_t *repl = NULL;
-	esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
-	/* Prompt to be printed before each line.
-	 * This can be customized, made dynamic, etc.
-	 */
-	repl_config.task_stack_size = 8192;
-	repl_config.prompt = "esp os>";//PROMPT_STR ">";
-	repl_config.max_cmdline_length = 1024;//CONFIG_CONSOLE_MAX_COMMAND_LINE_LENGTH;
-
-	/* Register commands */
-	esp_console_register_help_command();
-	register_commands();
-	//register_system_common();
-
-	esp_console_dev_uart_config_t hw_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
-	ESP_ERROR_CHECK(esp_console_new_repl_uart(&hw_config, &repl_config, &repl));
-
-	ESP_ERROR_CHECK(esp_console_start_repl(repl));
 	esp_log_level_set("*", ESP_LOG_NONE);
+	register_commands();
+	shell_init();
 }
 
 void app_main(void) {
+	int main_id = 0;
 	gpio_set_direction (RP2040_RST_PIN, GPIO_MODE_OUTPUT);
 	gpio_set_level(RP2040_RST_PIN, 0);
 
@@ -237,10 +191,45 @@ void app_main(void) {
 	ESP_ERROR_CHECK(esp_netif_init());
 	ESP_ERROR_CHECK(esp_event_loop_create_default());
 
+	window_manager_init();
 	ota_show_status();
+
+	main_id = window_register("Main", xTaskGetCurrentTaskHandle(), NULL, NULL);
+	focus_request(main_id);
 
 	gpio_set_level(RP2040_RST_PIN, 1);
 	rpi_uart_init(0, configMAX_PRIORITIES-1);
+
+	vga_get_frame_size();
+	printf("Window Size: %dx%d\n", vga_getWindowWidth(), vga_getWindowHeigth());
+
+	//boot_logo_animation_dynamic();
+
+	vga_clear_screen(0, 0, 0);  // schwarzer Hintergrund
+	// Titel
+	setCursor(10, 2);
+	drawText("ESPOS Operating System", 255, 255, 255);  // weiß
+	setCursorNextLine();
+	vga_draw_line(0, getYCursor(), 640, getYCursor(), 0, 255, 0);
+	vga_swap_buffers();
+	// Infos
+	setCursorNextLine();
+	drawText(">> Initializing subsystems...", 0, 255, 255);
+
+	setCursorNextLine();
+	setCursorNextLine();
+	drawText(">> PSRAM: ", 255, 255, 0);
+	vga_swap_buffers();
+
+	char psram_info[64];
+	snprintf(psram_info, sizeof(psram_info), "Total: %d bytes | Free: %d bytes",
+			heap_caps_get_total_size(MALLOC_CAP_SPIRAM),
+			heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+	drawText(psram_info, 255, 255, 255);
+
+	setCursorNextLine();
+	drawText(">> SPIFFS: ", 255, 255, 0);
+	vga_swap_buffers();
 
 	//Initialize NVS
 	esp_err_t ret = nvs_flash_init();
@@ -248,24 +237,54 @@ void app_main(void) {
 	  nvs_flash_erase();
 	  ret = nvs_flash_init();
 	}
-	init_spiffs();
+	xTaskCreate(init_spiffs, "Spiffs Init", 4096, NULL, 1, &init_spiffs_handle);
+	float angle = 0.0f;
+	while(init_spiffs_handle != NULL)
+	{
+		vga_fill_circle(vga_getWindowWidth()/2, vga_getWindowHeigth()/2, 45, 0, 0, 0);
+		draw_spinner(vga_getWindowWidth()/2, vga_getWindowHeigth()/2, 40, angle);
+		vga_swap_buffers();
 
+		angle += 30.0f;       // Rotationsgeschwindigkeit
+		if (angle >= 360.0f)  // einmal rum
+			angle = 0.0f;
+
+		vTaskDelay(pdMS_TO_TICKS(80));  // 80 ms Pause → flüssig
+	}
+	vga_fill_circle(vga_getWindowWidth()/2, vga_getWindowHeigth()/2, 45, 0, 0, 0);
+
+	setCursorNextLine();
+	drawText(">> Init Apps...", 0, 255, 255);
+	vga_swap_buffers();
 	init_systemcalls();
 	initApps();
 	
+	setCursorNextLine();
+	drawText(">> Wi-Fi: Connecting...", 255, 255, 0);
+	setCursorNextLine();
+	vga_swap_buffers();
 	wifi_init_sta();
 
 	check_and_update_firmware(0);
 
-	print_bootscreen();
 	i2c_init();
 	ESP_LOGI(TAG, "[APP] Tasks activated %d", uxTaskGetNumberOfTasks());
 	
-	vTaskDelay(pdMS_TO_TICKS(5000));
-	//run_graphics_test();
-	//draw_landscape();
+	setCursorNextLine();
+	drawText("Bootloader v1.0 - Build 2025.08", 0, 0, 255);
+	setCursorNextLine();
+	drawText("RP2040 GPU online", 0, 255, 0);
+	setCursorNextLine();
+	drawText("ESP32 Host initialized", 0, 255, 0);
+	setCursorNextLine();
+	vga_draw_line(0, getYCursor(), 640, getYCursor(), 0, 255, 0);
+	vga_swap_buffers();
+	setCursorNextLine();
+
+	focus_release(main_id);
 	init_console();
 	while (1) {
 		vTaskDelay(pdMS_TO_TICKS(2000));
 	}
+	window_unregister(main_id);
 }

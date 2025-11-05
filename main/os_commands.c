@@ -1,4 +1,5 @@
 #include "os_commands.h"
+#include "shell.h"
 #include "wifi.h"
 #include "uart_lib.h"
 #include "i2c_lib.h"
@@ -7,6 +8,7 @@
 #include "systemCalls.h"
 #include "pin_def.h"
 #include "vga.h"
+#include "pong.h"
 #include "version.h"
 
 #include <freertos/FreeRTOS.h>
@@ -16,7 +18,6 @@
 #include "freertos/queue.h"
 #include "esp_task_wdt.h"
 
-#include "esp_console.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_sleep.h"
@@ -27,6 +28,8 @@
 
 #include "../../register_def.h"
 
+#include "test_image.h"
+
 // Struktur zur Verwaltung laufender Apps
 typedef struct {
 	uint8_t io;              // Input/Output des GPIOs
@@ -35,140 +38,140 @@ typedef struct {
 
 GPIO_t Gpio[32];
 
-esp_console_cmd_t version_command = {
+shell_command_t version_command = {
 	.command = "version",
 	.help = "Zeigt die Version des ESP32 OS",
 	.hint = NULL,
 	.func = &version_cmd,
 };
 
-esp_console_cmd_t webserver_command = {
+shell_command_t webserver_command = {
 	.command = "webserver",
 	.help = "Startet oder stoppt den Webserver",
 	.hint = "<start stop>",
 	.func = &handle_update_server,
 };
 
-esp_console_cmd_t update_command = {
+shell_command_t update_command = {
 	.command = "update",
 	.help = "Führt ein Firmware-Update durch.\n-c		Only Check for new Firmware\n-d		Check and Download new Frimware\n-i		Install downloaded Frimware\n",
 	.hint = "<-c -d -i>",
 	.func = &update,
 };
 
-esp_console_cmd_t taskList_command = {
+shell_command_t taskList_command = {
 	.command = "tasklist",
 	.help = "Zeigt eine Liste der Tasks",
 	.hint = NULL,
 	.func = &get_task_list_cmd,
 };
 
-esp_console_cmd_t appList_command = {
+shell_command_t appList_command = {
 	.command = "applist",
 	.help = "Zeigt eine Liste der Apps",
 	.hint = NULL,
 	.func = &printAppList,
 };
 
-esp_console_cmd_t startApp_command = {
+shell_command_t startApp_command = {
 	.command = "start",
 	.help = "Startet eine App",
 	.hint = NULL,
 	.func = &startApp_cmd,
 };
 
-esp_console_cmd_t stopApp_command = {
+shell_command_t stopApp_command = {
 	.command = "stop",
 	.help = "Stoppt eine App",
 	.hint = NULL,
 	.func = &stopApp_cmd,
 };
 
-esp_console_cmd_t move_command = {
+shell_command_t move_command = {
 	.command = "mv",
 	.help = "Verschiebt eine Datei",
 	.hint = NULL,
 	.func = &move_cmd,
 };
 
-esp_console_cmd_t remove_command = {
+shell_command_t remove_command = {
 	.command = "rm",
 	.help = "Löscht eine Datei",
 	.hint = NULL,
 	.func = &remove_cmd,
 };
 
-esp_console_cmd_t list_file_command = {
+shell_command_t list_file_command = {
 	.command = "ls",
 	.help = "Listet Dateien im Verzeichnis auf",
 	.hint = NULL,
 	.func = &list_file_cmd,
 };
 
-esp_console_cmd_t print_file_command = {
+shell_command_t print_file_command = {
 	.command = "cat",
 	.help = "Zeigt den Inhalt einer Datei",
 	.hint = NULL,
 	.func = &print_file_cmd,
 };
 
-esp_console_cmd_t free_mem_command = {
+shell_command_t free_mem_command = {
 	.command = "free",
 	.help = "Zeigt den freien Speicher",
 	.hint = NULL,
 	.func = &free_mem_cmd,
 };
 
-esp_console_cmd_t wlan_printip_command = {
+shell_command_t wlan_printip_command = {
 	.command = "ifconfig",
 	.help = "Zeigt die IP-Adresse",
 	.hint = NULL,
 	.func = &wlan_ip_cmd,
 };
 
-esp_console_cmd_t wlan_command = {
+shell_command_t wlan_command = {
 	.command = "wlan",
 	.help = "Steuerung der WLAN-Verbindung",
 	.hint = "<disconnect connect reset scan list auto forget> <ssid> <password>",
 	.func = &wlan_cmd,
 };
 
-esp_console_cmd_t reboot_command = {
+shell_command_t reboot_command = {
 	.command = "reboot",
 	.help = "Startet das System neu",
 	.hint = NULL,
 	.func = &cmd_reboot,
 };
 
-esp_console_cmd_t shutdown_command = {
+shell_command_t shutdown_command = {
 	.command = "shutdown",
 	.help = "Fährt das System herunter oder startet es neu",
 	.hint = "<-r -h> <time>",
 	.func = &cmd_shutdown,
 };
 
-esp_console_cmd_t interface_command = {
+shell_command_t interface_command = {
 	.command = "if",
 	.help = "Konfiguriert die Netzwerkschnittstelle",
 	.hint = "<up down>",
 	.func = &interface_cmd,
 };
 
-esp_console_cmd_t debug_command = {
+shell_command_t debug_command = {
 	.command = "debug",
 	.help = "Konfiguriert die Debug-Ausgabe",
 	.hint = "<None Error Warnung Info Debug All>",
 	.func = &debug_cmd,
 };
 
-esp_console_cmd_t gpio_command = {
+shell_command_t gpio_command = {
 	.command = "gpio",
 	.help = "Steuert die gpios",
 	.hint = "<set get> <Pin IO State>",
 	.func = &gpio_cmd,
 };
 
-esp_console_cmd_t vga_command = {
+shell_command_t vga_command = {
 	.command = "vga",
 	.help = "Steuert die VGA Schnittstelle",
 	.hint = "Usage: vga <clear line rect fillrect text circle fillcircle triangle filltriangle> <x y x1 y1 x2 y2> <r g b> <text>",
@@ -222,13 +225,18 @@ int update(int argc, char **argv) {
 int get_task_list_cmd(int argc, char **argv) {
 	TaskStatus_t task_list[20];  // Platz für 20 Tasks
 	UBaseType_t task_count, i;
+	uint64_t total_runtime;
 
-	task_count = uxTaskGetSystemState(task_list, 20, NULL);
+	task_count = uxTaskGetSystemState(task_list, 20, &total_runtime);
 
 	printf("Tasks aktiv: %d davon %d App\n", uxTaskGetNumberOfTasks(), getAppsRunning());
-	printf("Task Name       State      Prio  Stack  Core\n");
-	printf("----------------------------------------------\n");
+	printf("Task Name       State      Prio  Stack  Core  CPU\n");
+	printf("--------------------------------------------------------\n");
 	for (i = 0; i < task_count; i++) {
+		float usage = (total_runtime > 0)
+            ? (100.0f * task_list[i].ulRunTimeCounter / total_runtime)
+            : 0.0f;
+
 		const char *state;
 		switch (task_list[i].eCurrentState) {
 			case eRunning:   state = "Running"; break;
@@ -239,21 +247,22 @@ int get_task_list_cmd(int argc, char **argv) {
 			default:         state = "Unknown"; break;
 		}
 
-		int core_id = xTaskGetAffinity(task_list[i].xHandle); // Kern-ID abrufen
+		//int core_id = xTaskGetAffinity(task_list[i].xHandle); // Kern-ID abrufen
 
-		printf("%-15s %-10s %2d    %6ld %4d\n",
+		printf("%-15s %-10s %2d    %6ld %4d  %5.1f%%\n",
 			   task_list[i].pcTaskName,
 			   state,
 			   task_list[i].uxCurrentPriority,
 			   task_list[i].usStackHighWaterMark,
-			   core_id);
+			   task_list[i].xCoreID,
+			   usage);
 	}
 	return 0;
 }
 
 int startApp_cmd(int argc, char **argv) {
 	if(argc < 2) {
-		printf("Usage: startapp <appname>\n");
+		printf("Usage: start <appname>\n");
 		return 1;
 	}
 	registerApp(argv[1]);
@@ -262,7 +271,7 @@ int startApp_cmd(int argc, char **argv) {
 
 int stopApp_cmd(int argc, char **argv) {
 	if(argc < 2) {
-		printf("Usage: stopapp <appname>\n");
+		printf("Usage: stop <appname>\n");
 		return 1;
 	}
 	unregisterApp(argv[1]);
@@ -448,9 +457,9 @@ int cmd_wifi_forget(int argc, char **argv) {
 }
 
 int cmd_reboot(int argc, char **argv) {
-	uint8_t buf[3];
+	uint16_t buf[3];
 	buf[0] = CMD_REBOOT; //reboot
-	sendRPi(REG_POWER, &buf, 1);
+	sendRPi(REG_POWER, buf, 1);
 	delay_ms(10);
 	printf("System wird neu gestartet\n");
 	esp_restart();
@@ -458,7 +467,7 @@ int cmd_reboot(int argc, char **argv) {
 }
 
 int cmd_shutdown(int argc, char **argv) {
-	uint8_t buf[3];
+	uint16_t buf[3];
 
 	if(argc < 3) {
 		printf("Usage: shutdown <-r -h> <time>\n");
@@ -466,7 +475,7 @@ int cmd_shutdown(int argc, char **argv) {
 	}
 	if(strcmp(argv[1], "-r") == 0) {
 		buf[0] = CMD_REBOOT; //reboot
-		sendRPi(REG_POWER, &buf, 1);
+		sendRPi(REG_POWER, buf, 1);
 		if(strcmp(argv[2], "now") == 0) {
 			printf("System wird neu gestartet\n");
 			delay_ms(10);
@@ -479,7 +488,7 @@ int cmd_shutdown(int argc, char **argv) {
 		}
 	} else if(strcmp(argv[1], "-h") == 0) {
 		buf[0] = CMD_SHUTDOWN; //shutdown
-		sendRPi(REG_POWER, &buf, 1);
+		sendRPi(REG_POWER, buf, 1);
 		if(strcmp(argv[2], "now") == 0) {
 			printf("System wird heruntergefahren\n");
 			//gpio_set_level(RP2040_RST_PIN, 0);
@@ -559,7 +568,7 @@ int gpio_cmd(int argc, char **argv)
 
 	if(strcmp(argv[1], "set") == 0)
 	{
-		uint8_t buf[4];
+		uint16_t buf[4];
 		uint8_t pin = atoi(argv[2]);
 		Gpio[pin].io = atoi(argv[3]);
 		Gpio[pin].state = atoi(argv[4]);
@@ -567,7 +576,7 @@ int gpio_cmd(int argc, char **argv)
 		buf[1] = pin;
 		buf[2] = Gpio[pin].io;
 		buf[3] = Gpio[pin].state;
-		sendRPi(REG_GPIO, &buf, 4);
+		sendRPi(REG_GPIO, buf, 4);
 	}
 	else if(strcmp(argv[1], "get") == 0)
 	{
@@ -575,7 +584,7 @@ int gpio_cmd(int argc, char **argv)
 		uint8_t pin = atoi(argv[2]);
 		buf[0] = 0; //Get GPIO
 		buf[1] = pin;
-		sendRPi(REG_GPIO, &buf, 2);
+		sendRPi(REG_GPIO, buf, 2);
 		while(getRxComplete() != 1 && timeout_cnt < 1000)
 		{
 			timeout_cnt++;
@@ -672,15 +681,15 @@ int vga_cmd(int argc, char **argv)
 	{
 		if(argc < 8)
 		{
-			printf("vga text <x y> <text> <r g b>\n");
+			printf("vga text <x y> <r g b>  <text>\n");
 			return 1;
 		}
 		uint16_t x0 = atoi(argv[2]);
 		uint16_t y0 = atoi(argv[3]);
-		char *text = argv[4];
-		uint8_t r = atoi(argv[5]);
-		uint8_t g = atoi(argv[6]);
-		uint8_t b = atoi(argv[7]);
+		uint8_t r = atoi(argv[4]);
+		uint8_t g = atoi(argv[5]);
+		uint8_t b = atoi(argv[6]);
+		char *text = argv[7];
 		vga_draw_text(x0, y0, text, r, g, b);
 	}
 	else if(strcmp(argv[1], "circle") == 0)
@@ -749,10 +758,66 @@ int vga_cmd(int argc, char **argv)
 		uint8_t b = atoi(argv[10]);
 		vga_fill_triangle(x0, y0, x1, y1, x2, y2, r, g, b);
 	}
+	else if(strcmp(argv[1], "graphictest") == 0)
+	{
+		run_graphics_test();
+	}
+	else if(strcmp(argv[1], "getwindow") == 0)
+	{
+		vga_get_frame_size();
+		printf("Window Size: %dx%d\n", vga_getWindowWidth(), vga_getWindowHeigth());
+	}
+	else if(strcmp(argv[1], "swap") == 0)
+	{
+		vga_swap_buffers();
+	}
+	else if(strcmp(argv[1], "pong") == 0)
+	{
+		pong_run();
+	}
+	else if(strcmp(argv[1], "scroll") == 0)
+	{
+		if(argc < 4)
+		{
+			printf("vga scroll <x y>\n");
+			return 1;
+		}
+		uint16_t x0 = atoi(argv[2]);
+		uint16_t y0 = atoi(argv[3]);
+		vga_scroll(x0, y0);
+	}
+	else if(strcmp(argv[1], "load") == 0)
+	{
+		#define MAX_SEND_IMG 120
+
+		uint16_t width  = vga_getWindowWidth();
+		uint16_t height = vga_getWindowHeigth();
+
+		for (uint16_t y = 0; y < height; y++) {
+			uint16_t x = 0;
+			while (x < width) {
+				uint16_t remaining = width - x;
+				uint16_t chunk = (remaining > MAX_SEND_IMG) ? MAX_SEND_IMG : remaining;
+
+				// Sende diesen Block
+				vga_load_image_data(x, y, &img_buffer[y * width + x], chunk);
+
+				// Debug optional
+				// printf("Y:%3d X:%3d Chunk:%3d Rem:%3d\n", y, x, chunk, remaining);
+				// fflush(stdout);
+
+				x += chunk;
+				// Optional kleine Pause, falls UART puffert:
+				// vTaskDelay(pdMS_TO_TICKS(1));
+			}
+		}
+		vga_swap_buffers();
+	}
 	else
 	{
 		return 2;
 	}
+	//vga_swap_copie_buffers();
 	return 0;
 }
 
@@ -760,24 +825,24 @@ void register_commands(void)
 {
 	//Register OS Commands
 	//define in os_commands.h
-	esp_console_cmd_register(&version_command);
-	esp_console_cmd_register(&webserver_command);
-	esp_console_cmd_register(&update_command);
-	esp_console_cmd_register(&taskList_command);
-	esp_console_cmd_register(&appList_command);
-	esp_console_cmd_register(&startApp_command);
-	esp_console_cmd_register(&stopApp_command);
-	esp_console_cmd_register(&move_command);
-	esp_console_cmd_register(&remove_command);
-	esp_console_cmd_register(&list_file_command);
-	esp_console_cmd_register(&print_file_command);
-	esp_console_cmd_register(&free_mem_command);
-	esp_console_cmd_register(&wlan_command);
-	esp_console_cmd_register(&wlan_printip_command);
-	esp_console_cmd_register(&reboot_command);
-	esp_console_cmd_register(&shutdown_command);
-	esp_console_cmd_register(&interface_command);
-	esp_console_cmd_register(&debug_command);
-	esp_console_cmd_register(&gpio_command);
-	esp_console_cmd_register(&vga_command);
+	shell_register(&version_command);
+	shell_register(&webserver_command);
+	shell_register(&update_command);
+	shell_register(&taskList_command);
+	shell_register(&appList_command);
+	shell_register(&startApp_command);
+	shell_register(&stopApp_command);
+	shell_register(&move_command);
+	shell_register(&remove_command);
+	shell_register(&list_file_command);
+	shell_register(&print_file_command);
+	shell_register(&free_mem_command);
+	shell_register(&wlan_command);
+	shell_register(&wlan_printip_command);
+	shell_register(&reboot_command);
+	shell_register(&shutdown_command);
+	shell_register(&interface_command);
+	shell_register(&debug_command);
+	shell_register(&gpio_command);
+	shell_register(&vga_command);
 }

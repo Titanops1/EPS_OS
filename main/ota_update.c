@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "version.h"
+#include "vga.h"
+#include "window_manager.h"
 
 #define MAX_URL_LEN 256  // oder mehr, je nach Bedarf
 
@@ -25,19 +27,44 @@ uint32_t file_downlod_size = 0;
 int64_t start_time = 0;
 static int g_firmware_content_length = -1;
 
+int ota_window_id = -1;
+int focused = 0;
+
 #define PROGRESS_WIDTH 40
 
+//Window Callbacks
+static void gained_focus()
+{
+	focused = 1;
+}
+
+static void lost_focus()
+{
+	focused = 0;
+}
+
 void print_progress_bar(int current, int total) {
-    int progress = (current * PROGRESS_WIDTH) / total;
-    printf("\r[");
-    for (int i = 0; i < PROGRESS_WIDTH; i++) {
-        if (i < progress)
-            printf("#");
-        else
-            printf(" ");
-    }
-    printf("] %3d %%", (current * 100) / total);
-    fflush(stdout);
+	int progress = (current * PROGRESS_WIDTH) / total;
+	uint16_t y_pos = getYCursor();
+	uint16_t x_pos = getXCursor();
+	vga_draw_rect(10, y_pos, vga_getWindowWidth()-20, 20, 255, 255,255);
+	vga_fill_rect(11, y_pos+1, ((vga_getWindowWidth()-22) * current) / total, 18, 0, 200, 0);
+	setCursor(10, y_pos+12);
+
+	char progress_text[32];
+	snprintf(progress_text, sizeof(progress_text), "%d%%", (int)(current * 100 / total));
+	drawText(progress_text, 255, 255, 255);
+	setCursor(x_pos, y_pos);
+	vga_swap_buffers();
+	printf("\r[");
+	for (int i = 0; i < PROGRESS_WIDTH; i++) {
+		if (i < progress)
+			printf("#");
+		else
+			printf(" ");
+	}
+	printf("] %3d %%", (current * 100) / total);
+	fflush(stdout);
 }
 
 void printSize(uint32_t size)
@@ -130,6 +157,9 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 			break;
 		case HTTP_EVENT_ON_FINISH:
 			//printf("HTTP_EVENT_ON_FINISH\n");
+			setCursor(10, getYCursor+12);
+			setCursorNextLine();
+			
 			if (file) {
 				fclose(file);
 				file = NULL;
@@ -145,6 +175,16 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 				printSize(file_downlod_size);
 				printf(" in %.2f Sekunden\n", duration_sec);
 				printf("Durchschnittliche Geschwindigkeit: %.2f KB/s\n", speed_kbps);
+
+				char progress_text[64];
+				snprintf(progress_text, sizeof(progress_text), "Downloaded in %.2f Sekunden", duration_sec);
+				drawText(progress_text, 255, 255, 255);
+				setCursorNextLine();
+				snprintf(progress_text, sizeof(progress_text), "Durchschnittliche Geschwindigkeit: %.2f KB/s\n", speed_kbps);
+				drawText(progress_text, 255, 255, 255);
+				setCursorNextLine();
+				vga_swap_buffers();
+
 			} else {
 				printf("Download abgeschlossen. Zeitmessung zu kurz oder fehlgeschlagen.\n");
 			}
@@ -387,74 +427,90 @@ bool ota_perform_update(void) {
 }
 
 void check_and_update_firmware(int arg) {
+	bool update_check;
+
+	ota_window_id = window_register("OTA", NULL, gained_focus, lost_focus);
+	window_set_priority(ota_window_id, MAX_WINDOW_PRIORITY-1);
+	focus_request(ota_window_id);
+
+	drawText("[OTA] Checke aktuellen Firmware-Status", 255, 255, 0);
+	setCursorNextLine();
+	vga_swap_buffers();
 	printf("Überprüfe aktuellen Firmware-Status...\n");
 	ota_show_status();
 
-	if(arg == 0) //do all
-	{
-		if (ota_check_for_update())
+	if(arg == 0 || arg == 1 || arg == 2) {
+		//Check for Update
+		drawText("[OTA] Check for Update... ", 255, 255, 0);
+		vga_swap_buffers();
+		update_check = ota_check_for_update();
+		if(update_check)
 		{
-			printf("Firmware wird heruntergeladen...\n");
-			if (ota_download_firmware(firmware_url))
-			{
-				printf("Überprüfe Checksumme...\n");
-				if (ota_verify_checksum(firmware_checksum))
-				{
-					printf("Checksumme OK! Starte Update...\n");
-					if (!ota_perform_update())
-					{
-						printf("Update fehlgeschlagen, Rollback wird ausgeführt.\n");
-						remove(OTA_FILE_PATH);  // Firmware-Datei löschen
-					}
-				}
-				else
-				{
-					printf("Fehler: Checksumme falsch! Update abgebrochen.\n");
-					remove(OTA_FILE_PATH);  // Firmware-Datei löschen
-				}
-			}
-			else
-			{
-				printf("Fehler beim Download!\n");
-				remove(OTA_FILE_PATH);  // Firmware-Datei löschen
-			}
+			drawText("Update available", 255, 255, 0);
+			setCursorNextLine();
 		}
+		else
+		{
+			drawText("Update not available", 255, 255, 0);
+			setCursorNextLine();
+		}
+		vga_swap_buffers();
 	}
-	else if(arg == 1) //only check
-	{
-		ota_check_for_update();
-	}
-	else if(arg == 2) //only check and download
-	{
-		if (ota_check_for_update())
+
+	if(arg == 0 || arg == 2) {
+		//Download Firmware
+		if (update_check)
 		{
 			printf("Firmware wird heruntergeladen...\n");
+			drawText("[OTA] Download Firmware...", 255, 255, 0);
+			setCursorNextLine();
+			vga_swap_buffers();
 			if (ota_download_firmware(firmware_url))
 			{
 				printf("Überprüfe Checksumme...\n");
+				drawText("[OTA] Check Checksum... ", 255, 255, 0);
+				vga_swap_buffers();
 				if (ota_verify_checksum(firmware_checksum))
 				{
 					printf("Checksumme OK!\n");
+					drawText("OK", 255, 255, 0);
+					setCursorNextLine();
+					vga_swap_buffers();
 				}
 				else
 				{
 					printf("Checksumme not OK!\nFile removed!\n");
+					drawText("not OK", 255, 0, 0);
+					setCursorNextLine();
+					vga_swap_buffers();
 					remove(OTA_FILE_PATH);  // Firmware-Datei löschen
 				}
 			}
 			else
 			{
 				printf("Download fehlgeschlagen!\nFile removed!\n");
+				drawText("[OTA] Download Failed!", 255, 0, 0);
+				setCursorNextLine();
+				vga_swap_buffers();
 				remove(OTA_FILE_PATH);  // Firmware-Datei löschen
 			}
 		}
 	}
-	else if(arg == 3) //instal downloaded file
-	{
+
+	if((arg == 0 && update_check) || arg == 3) {
+		//Install Firmware
+		drawText("[OTA] Perform Update...", 255, 255, 0);
+		setCursorNextLine();
+		vga_swap_buffers();
 		if (!ota_perform_update())
 		{
 			printf("Update fehlgeschlagen, Rollback wird ausgeführt.\n");
+			drawText("[OTA] Update Failed!", 255, 0, 0);
+			setCursorNextLine();
+			vga_swap_buffers();
 			remove(OTA_FILE_PATH);  // Firmware-Datei löschen
 		}
 	}
+	focus_release(ota_window_id);
+	window_unregister(ota_window_id);
 }
