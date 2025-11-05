@@ -49,7 +49,7 @@ void print_progress_bar(int current, int total) {
 	uint16_t x_pos = getXCursor();
 	vga_draw_rect(10, y_pos, vga_getWindowWidth()-20, 20, 255, 255,255);
 	vga_fill_rect(11, y_pos+1, ((vga_getWindowWidth()-22) * current) / total, 18, 0, 200, 0);
-	setCursor(10, y_pos+12);
+	setCursor(10, y_pos+22);
 
 	char progress_text[32];
 	snprintf(progress_text, sizeof(progress_text), "%d%%", (int)(current * 100 / total));
@@ -157,7 +157,7 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 			break;
 		case HTTP_EVENT_ON_FINISH:
 			//printf("HTTP_EVENT_ON_FINISH\n");
-			setCursor(10, getYCursor+12);
+			setCursor(10, getYCursor+22);
 			setCursorNextLine();
 			
 			if (file) {
