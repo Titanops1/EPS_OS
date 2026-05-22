@@ -9,6 +9,26 @@
 #include "string.h"
 #include "driver/gpio.h"
 
+typedef struct {
+	uint16_t cmd;
+	uint16_t data0;
+	uint8_t data1;
+} vga_event_t;
+extern QueueHandle_t vga_queue;
+
+typedef struct {
+	uint16_t x;
+	uint16_t y;
+	uint8_t pressed;
+} touch_event_t;
+extern QueueHandle_t touch_queue;
+
+typedef struct {
+	uint16_t cmd;
+	uint16_t data0;
+} gpio_event_t;
+extern QueueHandle_t gpio_queue;
+
 void rpi_uart_init(uint8_t core_num, uint8_t priority);
 void rpi_uart_close(void);
 

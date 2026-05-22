@@ -2,6 +2,7 @@
 #define SHELL_H
 
 #include <stddef.h>
+#include "swi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,6 +18,8 @@ typedef struct {
 	const char *hint;         // Hilfe-/Beschreibungstext
 	shell_cmd_func_t func;    // Funktionszeiger
 } shell_command_t;
+
+int shell_getId();
 
 /**
  * @brief Initialisiert die Shell (UART, Tasks etc.)
@@ -38,13 +41,6 @@ int shell_register(const shell_command_t *cmd);
  * @return 0 bei Erfolg, <0 bei Fehler
  */
 int shell_unregister(const char *cmd);
-
-/**
- * @brief Führt eine Befehlszeile aus (kann auch intern von der Shell benutzt werden).
- * 
- * @param line Eingabezeile als String
- */
-void shell_execute(char *line);
 
 #ifdef __cplusplus
 }

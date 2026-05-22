@@ -437,7 +437,6 @@ int esp_elf_relocate(esp_elf_t *elf, const uint8_t *pbuf)
                         addr = esp_elf_map_sym(elf, sym->value);
                     } else {
                         addr = elf_find_sym(func_name);
-						ESP_LOGI(TAG, "Find symbol %s addr=%x", func_name, addr);
                     }
 
                     if (!addr) {

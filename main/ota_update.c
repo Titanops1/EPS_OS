@@ -47,13 +47,13 @@ void print_progress_bar(int current, int total) {
 	int progress = (current * PROGRESS_WIDTH) / total;
 	uint16_t y_pos = getYCursor();
 	uint16_t x_pos = getXCursor();
-	vga_draw_rect(10, y_pos, vga_getWindowWidth()-20, 20, 255, 255,255);
-	vga_fill_rect(11, y_pos+1, ((vga_getWindowWidth()-22) * current) / total, 18, 0, 200, 0);
+	vga_draw_rect(10, y_pos, vga_getWindowWidth()-20, 20, 255, 255, 255, 255);
+	vga_fill_rect(11, y_pos+1, ((vga_getWindowWidth()-22) * current) / total, 18, 0, 200, 0, 255);
 	setCursor(10, y_pos+22);
 
 	char progress_text[32];
 	snprintf(progress_text, sizeof(progress_text), "%d%%", (int)(current * 100 / total));
-	drawText(progress_text, 255, 255, 255);
+	drawText(progress_text, 255, 255, 255, 255);
 	setCursor(x_pos, y_pos);
 	vga_swap_buffers();
 	printf("\r[");
@@ -178,13 +178,12 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 
 				char progress_text[64];
 				snprintf(progress_text, sizeof(progress_text), "Downloaded in %.2f Sekunden", duration_sec);
-				drawText(progress_text, 255, 255, 255);
+				drawText(progress_text, 255, 255, 255, 255);
 				setCursorNextLine();
 				snprintf(progress_text, sizeof(progress_text), "Durchschnittliche Geschwindigkeit: %.2f KB/s\n", speed_kbps);
-				drawText(progress_text, 255, 255, 255);
+				drawText(progress_text, 255, 255, 255, 255);
 				setCursorNextLine();
 				vga_swap_buffers();
-
 			} else {
 				printf("Download abgeschlossen. Zeitmessung zu kurz oder fehlgeschlagen.\n");
 			}
@@ -433,7 +432,7 @@ void check_and_update_firmware(int arg) {
 	window_set_priority(ota_window_id, MAX_WINDOW_PRIORITY-1);
 	focus_request(ota_window_id);
 
-	drawText("[OTA] Checke aktuellen Firmware-Status", 255, 255, 0);
+	drawText("[OTA] Checke aktuellen Firmware-Status", 255, 255, 0, 255);
 	setCursorNextLine();
 	vga_swap_buffers();
 	printf("Überprüfe aktuellen Firmware-Status...\n");
@@ -441,17 +440,17 @@ void check_and_update_firmware(int arg) {
 
 	if(arg == 0 || arg == 1 || arg == 2) {
 		//Check for Update
-		drawText("[OTA] Check for Update... ", 255, 255, 0);
+		drawText("[OTA] Check for Update... ", 255, 255, 0, 255);
 		vga_swap_buffers();
 		update_check = ota_check_for_update();
 		if(update_check)
 		{
-			drawText("Update available", 255, 255, 0);
+			drawText("Update available", 255, 255, 0, 255);
 			setCursorNextLine();
 		}
 		else
 		{
-			drawText("Update not available", 255, 255, 0);
+			drawText("Update not available", 255, 255, 0, 255);
 			setCursorNextLine();
 		}
 		vga_swap_buffers();
@@ -462,25 +461,25 @@ void check_and_update_firmware(int arg) {
 		if (update_check)
 		{
 			printf("Firmware wird heruntergeladen...\n");
-			drawText("[OTA] Download Firmware...", 255, 255, 0);
+			drawText("[OTA] Download Firmware...", 255, 255, 0, 255);
 			setCursorNextLine();
 			vga_swap_buffers();
 			if (ota_download_firmware(firmware_url))
 			{
 				printf("Überprüfe Checksumme...\n");
-				drawText("[OTA] Check Checksum... ", 255, 255, 0);
+				drawText("[OTA] Check Checksum... ", 255, 255, 0, 255);
 				vga_swap_buffers();
 				if (ota_verify_checksum(firmware_checksum))
 				{
 					printf("Checksumme OK!\n");
-					drawText("OK", 255, 255, 0);
+					drawText("OK", 255, 255, 0, 255);
 					setCursorNextLine();
 					vga_swap_buffers();
 				}
 				else
 				{
 					printf("Checksumme not OK!\nFile removed!\n");
-					drawText("not OK", 255, 0, 0);
+					drawText("not OK", 255, 0, 0, 255);
 					setCursorNextLine();
 					vga_swap_buffers();
 					remove(OTA_FILE_PATH);  // Firmware-Datei löschen
@@ -489,7 +488,7 @@ void check_and_update_firmware(int arg) {
 			else
 			{
 				printf("Download fehlgeschlagen!\nFile removed!\n");
-				drawText("[OTA] Download Failed!", 255, 0, 0);
+				drawText("[OTA] Download Failed!", 255, 0, 0, 255);
 				setCursorNextLine();
 				vga_swap_buffers();
 				remove(OTA_FILE_PATH);  // Firmware-Datei löschen
@@ -499,13 +498,13 @@ void check_and_update_firmware(int arg) {
 
 	if((arg == 0 && update_check) || arg == 3) {
 		//Install Firmware
-		drawText("[OTA] Perform Update...", 255, 255, 0);
+		drawText("[OTA] Perform Update...", 255, 255, 0, 255);
 		setCursorNextLine();
 		vga_swap_buffers();
 		if (!ota_perform_update())
 		{
 			printf("Update fehlgeschlagen, Rollback wird ausgeführt.\n");
-			drawText("[OTA] Update Failed!", 255, 0, 0);
+			drawText("[OTA] Update Failed!", 255, 0, 0, 255);
 			setCursorNextLine();
 			vga_swap_buffers();
 			remove(OTA_FILE_PATH);  // Firmware-Datei löschen

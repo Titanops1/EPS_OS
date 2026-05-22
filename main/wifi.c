@@ -9,6 +9,8 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 
+#include "memory.h"
+
 static const char *TAG = "wifi_mqtt";
 #define WIFI_FILE "/spiffs/wifi/wifi.conf"
 /* FreeRTOS event group to signal when we are connected*/
@@ -359,7 +361,7 @@ void wlan_disconnect(void)
 }
 
 void connect_saved_wifi() {
-	char *password = heap_caps_malloc(64, MALLOC_CAP_SPIRAM);;
+	char *password = psram_malloc(64);
 	EventBits_t bits;
 	int ret;
 
@@ -371,12 +373,12 @@ void connect_saved_wifi() {
 			ESP_LOGI(TAG, "[WiFi] Verbinde mit SSID:%s", wifi_handle.ap_info[i].ssid);
 			bits = wlan_connect((char *)wifi_handle.ap_info[i].ssid, password);
 			if (bits & WIFI_CONNECTED_BIT) {
-				heap_caps_free(password);
+				psram_free(password);
 				return;
 			}
 		}
 	}
-	heap_caps_free(password);
+	psram_free(password);
 }
 
 EventBits_t wlan_connect(const char *ssid, const char *password)

@@ -1,4 +1,5 @@
 #include "os_commands.h"
+#include "swi.h"
 #include "shell.h"
 #include "wifi.h"
 #include "uart_lib.h"
@@ -27,8 +28,11 @@
 #include <dirent.h> 
 
 #include "../../register_def.h"
+#include "memory.h"
 
 #include "test_image.h"
+
+#define MAX_TASK_COUNT	32
 
 // Struktur zur Verwaltung laufender Apps
 typedef struct {
@@ -178,6 +182,13 @@ shell_command_t vga_command = {
 	.func = &vga_cmd,
 };
 
+shell_command_t clear_command = {
+	.command = "clear",
+	.help = "Leert den Bildschirm",
+	.hint = " ",
+	.func = &clear_cmd,
+};
+
 // Handler für den "version"-Befehl
 int version_cmd(int argc, char **argv) {
 	printf("ESP32 OS Version: %s\n", OS_VERSION);
@@ -222,20 +233,49 @@ int update(int argc, char **argv) {
 	return 0;
 }
 
+void swap_task(TaskStatus_t *a, TaskStatus_t *b) {
+    TaskStatus_t t = *a;
+    *a = *b;
+    *b = t;
+}
+
+int partition(TaskStatus_t arr[], int low, int high) {
+    TaskStatus_t pivot = arr[high];
+    int i = low - 1;
+
+    for (int j = low; j < high; j++) {
+        if (arr[j].ulRunTimeCounter >= pivot.ulRunTimeCounter) { // absteigend
+            i++;
+            swap_task(&arr[i], &arr[j]);
+        }
+    }
+    swap_task(&arr[i + 1], &arr[high]);
+    return i + 1;
+}
+
+void quicksort_tasks(TaskStatus_t arr[], int low, int high) {
+    if (low < high) {
+        int pi = partition(arr, low, high);
+        quicksort_tasks(arr, low, pi - 1);
+        quicksort_tasks(arr, pi + 1, high);
+    }
+}
+
 int get_task_list_cmd(int argc, char **argv) {
-	TaskStatus_t task_list[20];  // Platz für 20 Tasks
+	TaskStatus_t task_list[MAX_TASK_COUNT];
 	UBaseType_t task_count, i;
 	uint64_t total_runtime;
 
-	task_count = uxTaskGetSystemState(task_list, 20, &total_runtime);
+	task_count = uxTaskGetSystemState(task_list, MAX_TASK_COUNT, &total_runtime);
 
 	printf("Tasks aktiv: %d davon %d App\n", uxTaskGetNumberOfTasks(), getAppsRunning());
 	printf("Task Name       State      Prio  Stack  Core  CPU\n");
 	printf("--------------------------------------------------------\n");
+	quicksort_tasks(task_list, 0, task_count - 1);
 	for (i = 0; i < task_count; i++) {
 		float usage = (total_runtime > 0)
-            ? (100.0f * task_list[i].ulRunTimeCounter / total_runtime)
-            : 0.0f;
+			? (100.0f * task_list[i].ulRunTimeCounter / total_runtime)
+			: 0.0f;
 
 		const char *state;
 		switch (task_list[i].eCurrentState) {
@@ -256,7 +296,56 @@ int get_task_list_cmd(int argc, char **argv) {
 			   task_list[i].usStackHighWaterMark,
 			   task_list[i].xCoreID,
 			   usage);
+		
+		fflush(stdout);
 	}
+		
+	window_t* taskmanager;
+	textbox_t* tasklist_box;
+	uint32_t notified;
+	swi_msg_t msg;
+
+	taskmanager = createForm(vga_getWindowWidth()-241, 0, 168, 239, 0);
+	tasklist_box = createTextbox(0, 0, 168, 239);
+	window_add_widget(taskmanager, (widget_t*) tasklist_box);
+	while(1)
+	{
+		char tasklist_text[40];
+		task_count = uxTaskGetSystemState(task_list, MAX_TASK_COUNT, &total_runtime);
+		textbox_clear(tasklist_box);
+
+		snprintf(tasklist_text, sizeof(tasklist_text), "Prozess         Prio  CPU");
+		textbox_set_text(tasklist_box, tasklist_text, 0x0000FF);
+		textbox_set_text(tasklist_box, "----------------------------", 0xFF00FF);
+
+		quicksort_tasks(task_list, 0, task_count - 1);
+
+		for (i = 0; i < task_count; i++) {
+			float usage = (total_runtime > 0)
+				? (100.0f * task_list[i].ulRunTimeCounter / total_runtime)
+				: 0.0f;
+
+			snprintf(tasklist_text, sizeof(tasklist_text), "%-15s %2d    %3.1f%%",
+					task_list[i].pcTaskName,
+					task_list[i].uxCurrentPriority,
+					usage);
+			textbox_set_text(tasklist_box, tasklist_text, 0x000000);
+		}
+		if (swi_get_notification(&notified, 0) == 1) {
+			// drain queue
+			while (swi_recv_message(swi_get_appId(), &msg, 0)) {
+				// process message (ISR-safe content)
+				ESP_LOGI("TaskManager", "App got signal type=%u, data[0]=%u\n", msg.type, msg.data[0]);
+				if(msg.type == 0 && msg.data[0] == 9) {
+					destroyForm(taskmanager);
+					printf("Beende Taskmanager\n");
+					return 1;
+				}
+			}
+		}
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	}
+	destroyForm(taskmanager);
 	return 0;
 }
 
@@ -294,6 +383,7 @@ int remove_cmd(int argc, char **argv) {
 		printf("Usage: rm <appname>\n");
 		return 1;
 	}
+	sys_access();
 	remove(argv[1]);
 	return 0;
 }
@@ -305,8 +395,10 @@ int list_file_cmd(int argc, char **argv) {
 	}
 	DIR *dir;
 	struct dirent *ent;
+	sys_access();
 	if ((dir = opendir(argv[1])) != NULL) {
 		while ((ent = readdir(dir)) != NULL) {
+			sys_access();
 			printf("%s\n", ent->d_name);
 		}
 		closedir(dir);
@@ -322,6 +414,7 @@ int print_file_cmd(int argc, char **argv) {
 		printf("Usage: cat <filename>\n");
 		return 1;
 	}
+	sys_access();
 	const char *filename = argv[1];
 	FILE *file = fopen(filename, "r");
 	if(file == NULL) {
@@ -330,44 +423,12 @@ int print_file_cmd(int argc, char **argv) {
 	}
 	char line[128];
 	while(fgets(line, sizeof(line), file)) {
+		sys_access();
 		printf("%s", line);
 	}
+	sys_access();
 	fclose(file);
 	return 0;
-}
-
-void printMemorySize(uint32_t size)
-{
-	if(size < 1024)
-	{
-		printf("%ld Byte", size);
-	}
-	else if(size < 1024*1024)
-	{
-		printf("%.2f kByte", (float)(size)/1024.0f);
-	}
-	else
-	{
-		printf("%.2f MByte", (float)(size)/(1024.0f*1024.0f));
-	}
-}
-
-void print_heap_info() {
-	printf("Heap Gesamt:      ");
-	printMemorySize(heap_caps_get_total_size(MALLOC_CAP_8BIT));
-	printf("\n");
-	printf("Freier Heap:      ");
-	printMemorySize(heap_caps_get_free_size(MALLOC_CAP_8BIT));
-	printf("\n");
-	printf("Größter Block:    ");
-	printMemorySize(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-	printf("\n");
-	printf("Interner Heap:    ");
-	printMemorySize(heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
-	printf("\n");
-	printf("Externer Heap:    ");
-	printMemorySize(heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-	printf("\n");
 }
 
 int free_mem_cmd(int argc, char **argv) {
@@ -561,6 +622,7 @@ int debug_cmd(int argc, char **argv)
 int gpio_cmd(int argc, char **argv)
 {
 	uint16_t timeout_cnt = 0;
+	gpio_event_t ev;
 	if(argc < 2) {
 		printf("Usage: gpio <set get> Pin IO State\n");
 		return 1;
@@ -585,17 +647,11 @@ int gpio_cmd(int argc, char **argv)
 		buf[0] = 0; //Get GPIO
 		buf[1] = pin;
 		sendRPi(REG_GPIO, buf, 2);
-		while(getRxComplete() != 1 && timeout_cnt < 1000)
+		if (xQueueReceive(gpio_queue, &ev, pdMS_TO_TICKS(1000)))
 		{
-			timeout_cnt++;
-			delay_ms(10);
-		}
-		if(getRxComplete() == 1)
-		{
-			if(getRxReg() == REG_GPIO && getRxData(0) == 0)
+			if(ev.cmd == 0)
 			{
-				printf("GPIO%d: %d\n", pin, getRxData(1));
-				clearRxComplete();
+				printf("GPIO%d: %d\n", pin, ev.data0);
 			}
 		}
 		else
@@ -643,7 +699,7 @@ int vga_cmd(int argc, char **argv)
 		uint8_t r = atoi(argv[6]);
 		uint8_t g = atoi(argv[7]);
 		uint8_t b = atoi(argv[8]);
-		vga_draw_line(x0, y0, x1, y1, r, g, b);
+		vga_draw_line(x0, y0, x1, y1, r, g, b, 255);
 	}
 	else if(strcmp(argv[1], "rect") == 0)
 	{
@@ -659,7 +715,7 @@ int vga_cmd(int argc, char **argv)
 		uint8_t r = atoi(argv[6]);
 		uint8_t g = atoi(argv[7]);
 		uint8_t b = atoi(argv[8]);
-		vga_draw_rect(x0, y0, w, h, r, g, b);
+		vga_draw_rect(x0, y0, w, h, r, g, b, 255);
 	}
 	else if(strcmp(argv[1], "fillrect") == 0)
 	{
@@ -675,7 +731,7 @@ int vga_cmd(int argc, char **argv)
 		uint8_t r = atoi(argv[6]);
 		uint8_t g = atoi(argv[7]);
 		uint8_t b = atoi(argv[8]);
-		vga_fill_rect(x0, y0, x1, y1, r, g, b);
+		vga_fill_rect(x0, y0, x1, y1, r, g, b, 255);
 	}
 	else if(strcmp(argv[1], "text") == 0)
 	{
@@ -690,7 +746,7 @@ int vga_cmd(int argc, char **argv)
 		uint8_t g = atoi(argv[5]);
 		uint8_t b = atoi(argv[6]);
 		char *text = argv[7];
-		vga_draw_text(x0, y0, text, r, g, b);
+		vga_draw_text(x0, y0, text, r, g, b, 255);
 	}
 	else if(strcmp(argv[1], "circle") == 0)
 	{
@@ -705,7 +761,7 @@ int vga_cmd(int argc, char **argv)
 		uint8_t r = atoi(argv[5]);
 		uint8_t g = atoi(argv[6]);
 		uint8_t b = atoi(argv[7]);
-		vga_draw_circle(x, y, radius, r, g, b);
+		vga_draw_circle(x, y, radius, r, g, b, 255);
 	}
 	else if(strcmp(argv[1], "fillcircle") == 0)
 	{
@@ -720,7 +776,7 @@ int vga_cmd(int argc, char **argv)
 		uint8_t r = atoi(argv[5]);
 		uint8_t g = atoi(argv[6]);
 		uint8_t b = atoi(argv[7]);
-		vga_fill_circle(x, y, radius, r, g, b);
+		vga_fill_circle(x, y, radius, r, g, b, 255);
 	}
 	else if(strcmp(argv[1], "triangle") == 0)
 	{
@@ -738,7 +794,7 @@ int vga_cmd(int argc, char **argv)
 		uint8_t r = atoi(argv[8]);
 		uint8_t g = atoi(argv[9]);
 		uint8_t b = atoi(argv[10]);
-		vga_draw_triangle(x0, y0, x1, y1, x2, y2, r, g, b);
+		vga_draw_triangle(x0, y0, x1, y1, x2, y2, r, g, b, 255);
 	}
 	else if(strcmp(argv[1], "filltriangle") == 0)
 	{
@@ -756,7 +812,7 @@ int vga_cmd(int argc, char **argv)
 		uint8_t r = atoi(argv[8]);
 		uint8_t g = atoi(argv[9]);
 		uint8_t b = atoi(argv[10]);
-		vga_fill_triangle(x0, y0, x1, y1, x2, y2, r, g, b);
+		vga_fill_triangle(x0, y0, x1, y1, x2, y2, r, g, b, 255);
 	}
 	else if(strcmp(argv[1], "graphictest") == 0)
 	{
@@ -813,12 +869,28 @@ int vga_cmd(int argc, char **argv)
 		}
 		vga_swap_buffers();
 	}
+	// else if(strcmp(argv[1], "window") == 0)
+	// {
+	// 	window_t *main_window = createForm(0, 0, vga_getWindowWidth(), vga_getWindowHeigth()-60);
+	// 	textbox_t *tb = createTextbox(2, 2, vga_getWindowWidth()-2, getYFontSize()*2);
+	// 	window_add_widget(main_window, (widget_t*) tb);
+	// 	// set_active_window(&main_window);
+	// 	textbox_set_text(tb, "Dies ist ein Test!!");
+
+	// }
 	else
 	{
 		return 2;
 	}
 	//vga_swap_copie_buffers();
 	return 0;
+}
+
+int clear_cmd(int argc, char **argv)
+{
+	vga_scroll(0, vga_getWindowHeigth()-1);
+	setCursor(2, 2);
+	return 1;
 }
 
 void register_commands(void)
@@ -845,4 +917,5 @@ void register_commands(void)
 	shell_register(&debug_command);
 	shell_register(&gpio_command);
 	shell_register(&vga_command);
+	shell_register(&clear_command);
 }

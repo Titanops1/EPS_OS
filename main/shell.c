@@ -4,7 +4,9 @@
 #include "freertos/task.h"
 #include "driver/uart.h"
 #include "esp_log.h"
+#include "memory.h"
 #include "systemCalls.h"
+#include "swi.h"
 #include "shell.h"
 #include "window_manager.h"
 #include "vga.h"
@@ -36,14 +38,16 @@ static int cmd_echo(int argc, char **argv);
 static shell_command_t **commands = NULL;
 static int num_commands = 0;
 int shell_id = -1;
+swi_app_id_t shell_swi_id;
+swi_app_id_t cmd_id;
 
 TaskHandle_t cmdTask;
 
 static void shell_on_focus_gained(void) {
-	vga_clear_screen(0, 0, 0);
-	setCursor(10, 2);
-	drawText("esp os> ", 0, 255, 0);
-	vga_swap_buffers();
+	// vga_clear_screen(0, 0, 0);
+	// setCursor(10, 2);
+	// drawText("esp os> ", 0, 255, 0, 255);
+	// vga_swap_buffers();
 	printf("\nesp os> ");
 	fflush(stdout);
 }
@@ -67,7 +71,7 @@ static void uart_init_shell(void) {
 
 
 int shell_register(const shell_command_t *cmd) {
-	shell_command_t *new_cmd = heap_caps_malloc(sizeof(shell_command_t), MALLOC_CAP_SPIRAM);
+	shell_command_t *new_cmd = psram_malloc(sizeof(shell_command_t));
 	if (!new_cmd) return -1;
 
 	new_cmd->command = strdup(cmd->command);
@@ -76,9 +80,9 @@ int shell_register(const shell_command_t *cmd) {
 	new_cmd->func    = cmd->func;
 
 	// Array vergrößern
-	shell_command_t **tmp = heap_caps_realloc(commands, (num_commands + 1) * sizeof(shell_command_t *), MALLOC_CAP_SPIRAM);
+	shell_command_t **tmp = psram_realloc(commands, (num_commands + 1) * sizeof(shell_command_t *));
 	if (!tmp) {
-		heap_caps_free(new_cmd);
+		psram_free(new_cmd);
 		return -1;
 	}
 
@@ -98,10 +102,10 @@ int shell_unregister(const char *command) {
 
 		if (strcmp(cmd->command, command) == 0) {
 			// Speicher freigeben
-			heap_caps_free(&cmd->command);
-			heap_caps_free(&cmd->help);
-			if (cmd->hint) heap_caps_free(&cmd->hint);
-			heap_caps_free(&cmd);
+			psram_free(&cmd->command);
+			psram_free(&cmd->help);
+			if (cmd->hint) psram_free(&cmd->hint);
+			psram_free(&cmd);
 
 			// Array neu organisieren
 			for (int j = i; j < num_commands - 1; j++) {
@@ -111,7 +115,7 @@ int shell_unregister(const char *command) {
 
 			// Array verkleinern
 			if (num_commands == 0) {
-				heap_caps_free(commands);
+				psram_free(commands);
 				commands = NULL;
 			} else {
 				shell_command_t **tmp = heap_caps_realloc(commands, num_commands * sizeof(shell_command_t *), MALLOC_CAP_SPIRAM);
@@ -140,6 +144,7 @@ static void parse_and_execute(char *line) {
 	}
 	if (argc == 0)
 	{
+		swi_unregister_app(cmd_id);
 		cmdTask = NULL;
 		vTaskDelete(NULL);
 		return;
@@ -149,20 +154,29 @@ static void parse_and_execute(char *line) {
 	for (int i = 0; i < num_commands; i++) {
 		if (strcmp(argv[0], commands[i]->command) == 0) {
 			commands[i]->func(argc, argv);
-			cmdTask = NULL;
 			printf("\nesp os> ");
 			fflush(stdout);
-			if(focus_has(shell_id))
-			{
-				drawText("esp os> ", 0, 255, 0);
-				vga_swap_buffers();
-			}
+			// if(focus_has(shell_id))
+			// {
+			// 	drawText("esp os> ", 0, 255, 0, 255);
+			// 	vga_swap_buffers();
+			// }
+			swi_unregister_app(cmd_id);
+			cmdTask = NULL;
 			vTaskDelete(NULL);
 			return;
 		}
 	}
 
 	printf("Unknown command: %s\n", argv[0]);
+	printf("\nesp os> ");
+	fflush(stdout);
+	// if(focus_has(shell_id))
+	// {
+	// 	drawText("esp os> ", 0, 255, 0, 255);
+	// 	vga_swap_buffers();
+	// }
+	swi_unregister_app(cmd_id);
 	cmdTask = NULL;
 	vTaskDelete(NULL);
 }
@@ -189,17 +203,19 @@ static void shell_task(void *arg) {
 	uint8_t data;
 	int esc_state = 0;
 
-	shell_id = window_register("shell", xTaskGetCurrentTaskHandle(), shell_on_focus_gained, shell_on_focus_lost);
+	shell_swi_id = swi_get_appId();
 
-	window_set_priority(shell_id, MAX_WINDOW_PRIORITY-1);
-	focus_request(shell_id);
+	// shell_id = window_register("shell", xTaskGetCurrentTaskHandle(), shell_on_focus_gained, shell_on_focus_lost);
+
+	// window_set_priority(shell_id, MAX_WINDOW_PRIORITY-1);
+	// focus_request(shell_id);
 
 	printf("\nWelcome to ESP32 Shell! Type 'help' to see commands.\n> ");
 	printf("esp os> ");
-	drawText("Welcome to ESP32 Shell! Type 'help' to see commands.", 255, 255, 255);
-	setCursorNextLine();
-	drawText("esp os> ", 0, 255, 0);
-	vga_swap_buffers();
+	// drawText("Welcome to ESP32 Shell! Type 'help' to see commands.", 255, 255, 255, 255);
+	// setCursorNextLine();
+	// drawText("esp os> ", 0, 255, 0, 255);
+	// vga_swap_buffers();
 
 	while (1) {
 		int len = uart_read_bytes(UART_PORT_NUM, &data, 1, portMAX_DELAY);
@@ -216,11 +232,8 @@ static void shell_task(void *arg) {
 						tskIDLE_PRIORITY + 1,
 						&cmdTask
 					);
+					cmd_id = swi_register_app(cmdTask, 32);
 
-					if (res != pdPASS) {
-						printf("Failed to start command task\n");
-						cmdTask = NULL;
-					}
 					// In History speichern
 					if (history_count < HISTORY_LEN) {
 						strcpy(history[history_count++], line);
@@ -244,13 +257,13 @@ static void shell_task(void *arg) {
 					line_len--;
 					printf("\b \b"); // Bildschirm löschen
 					fflush(stdout);
-					if(focus_has(shell_id))
-					{
-						setCursor(getXCursor()-getXFontSize(), getYCursor());
-						drawText(" ", 255, 255, 255);
-						setCursor(getXCursor()-getXFontSize(), getYCursor());
-						vga_swap_buffers();
-					}
+					// if(focus_has(shell_id))
+					// {
+					// 	setCursor(getXCursor()-getXFontSize(), getYCursor());
+					// 	drawText(" ", 255, 255, 255, 255);
+					// 	setCursor(getXCursor()-getXFontSize(), getYCursor());
+					// 	vga_swap_buffers();
+					// }
 				}
 
 			} else if (data == 0x1B) { // ESC
@@ -259,21 +272,35 @@ static void shell_task(void *arg) {
 
 			} else if (data == 0x03) { // Ctrl+C
 				printf("^C\n");
+				swi_msg_t m = {0};
+				m.type = 0;
+				m.data[0] = 9;
+				swi_send_message(cmd_id, &m, 0); // 0 ticks wait
+				uint8_t timeout_loop = 0;
+				while(timeout_loop < 200 && cmdTask != NULL)
+				{
+					vTaskDelay(pdMS_TO_TICKS(100));
+					timeout_loop++;
+				}
+				printf("Timeout: %d\n", timeout_loop);
+				// vTaskDelay(pdMS_TO_TICKS(20000));
 				if (cmdTask != NULL) {
+					printf("Delete Task\n");
 					vTaskDelete(cmdTask);
+					swi_unregister_app(cmd_id);
 					cmdTask = NULL;
 				}
 				pos = 0;
 				line_len = 0;
 				printf("esp os> ");
 				fflush(stdout);
-				if(focus_has(shell_id))
-				{
-					drawText("^C", 255, 255, 255);
-					setCursorNextLine();
-					drawText("esp os> ", 0, 255, 0);
-					vga_swap_buffers();
-				}
+				// if(focus_has(shell_id))
+				// {
+				// 	drawText("^C", 255, 255, 255, 255);
+				// 	setCursorNextLine();
+				// 	drawText("esp os> ", 0, 255, 0, 255);
+				// 	vga_swap_buffers();
+				// }
 
 			} else if (data >= 0x20 && data <= 0x7E && line_len < MAX_INPUT_LEN - 1) {
 				// Zeichen einfügen
@@ -282,20 +309,20 @@ static void shell_task(void *arg) {
 				pos++;
 				line_len++;
 				uart_write_bytes(UART_PORT_NUM, (const char *)&data, 1);
-				if(focus_has(shell_id))
-				{
-					drawText((const char *)&data, 255, 255, 255);
-					vga_swap_buffers();
-				}
-				else
-				{
-					printf("Shell has no Focus\n");
-					if(focus_request(shell_id))
-					{
-						drawText((const char *)&data, 255, 255, 255);
-						vga_swap_buffers();
-					}
-				}
+				// if(focus_has(shell_id))
+				// {
+				// 	drawText((const char *)&data, 255, 255, 255, 255);
+				// 	vga_swap_buffers();
+				// }
+				// else
+				// {
+				// 	printf("Shell has no Focus\n");
+				// 	if(focus_request(shell_id))
+				// 	{
+				// 		drawText((const char *)&data, 255, 255, 255, 255);
+				// 		vga_swap_buffers();
+				// 	}
+				// }
 			}
 
 		} else if (esc_state == 1) {
@@ -345,6 +372,11 @@ static void shell_task(void *arg) {
 			esc_state = 0;
 		}
 	}
+}
+
+int shell_getId()
+{
+	return shell_swi_id;
 }
 
 // ---------- Main ----------

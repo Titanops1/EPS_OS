@@ -9,7 +9,6 @@ if("${CONFIG}" STREQUAL "" OR "${CONFIG}" STREQUAL "")
   "ca_cert.pem.S"
   "config/sdkconfig.cmake"
   "config/sdkconfig.h"
-  "dropbox.pem.S"
   "esp-idf/esptool_py/flasher_args.json.in"
   "esp-idf/mbedtls/x509_crt_bundle"
   "firmware.bin"

@@ -149,11 +149,6 @@ static const struct esp_elfsym g_esp_espidf_elfsyms[] = {
     ESP_ELFSYM_END
 };
 
-static const struct esp_elfsym* custom_symbols = NULL;
-void elf_set_custom_symbols(const struct esp_elfsym* symbols) {
-    custom_symbols = symbols;
-}
-
 /**
  * @brief Find symbol address by name.
  *
@@ -192,10 +187,11 @@ uintptr_t elf_find_sym(const char *sym_name)
     syms = g_esp_espidf_elfsyms;
     (void)syms;
 #endif
-	if(custom_symbols == NULL) {
-		return 0;
-	}
-    syms = custom_symbols;
+
+#ifdef CONFIG_ELF_LOADER_CUSTOMER_SYMBOLS
+    extern const struct esp_elfsym g_customer_elfsyms[];
+
+    syms = g_customer_elfsyms;
     while (syms->name) {
         if (!strcmp(syms->name, sym_name)) {
             return (uintptr_t)syms->sym;
@@ -203,5 +199,7 @@ uintptr_t elf_find_sym(const char *sym_name)
 
         syms++;
     }
+#endif
+
     return 0;
 }

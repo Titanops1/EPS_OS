@@ -1,0 +1,1 @@
+void init_explorer(uint16_t win_width, uint16_t win_heigth);

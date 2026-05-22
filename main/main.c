@@ -33,6 +33,9 @@
 #include "ota_update.h"
 #include "vga.h"
 #include "window_manager.h"
+#include "memory.h"
+
+#include "explorer.h"
 
 #include "pin_def.h"
 #include "../../register_def.h"
@@ -70,7 +73,7 @@ void boot_logo_animation_dynamic() {
 
 		// Pulsierender Kreis als Logo
 		int radius = 20 + (frame % 20);  // Radius zwischen 20..39
-		vga_fill_circle(x, y, radius, 255, 0, 0);
+		vga_fill_circle(x, y, radius, 255, 0, 0, 255);
 
 		// Drehendes Dreieck
 		float angle = (frame * 0.1f);
@@ -80,12 +83,12 @@ void boot_logo_animation_dynamic() {
 		int y2 = y + 30*sinf(angle + 2.09f);
 		int x3 = x + 30*cosf(angle + 4.18f);
 		int y3 = y + 30*sinf(angle + 4.18f);
-		vga_fill_triangle(x1, y1, x2, y2, x3, y3, 0, 255, 0);
+		vga_fill_triangle(x1, y1, x2, y2, x3, y3, 0, 255, 0, 255);
 
 		// Pulsierendes Rechteck
 		int w = 50 + (frame % 15);
 		int h = 30 + (frame % 15);
-		vga_fill_rect(x-w/2, y+h/2, w, h, 0, 0, 255);
+		vga_fill_rect(x-w/2, y+h/2, w, h, 0, 0, 255, 255);
 
 		// Buffer swap
 		vga_swap_buffers();
@@ -98,6 +101,8 @@ void boot_logo_animation_dynamic() {
 
 void init_spiffs(void *arg)
 {
+	gpio_set_direction(BLUE_LED_PIN, GPIO_MODE_OUTPUT);
+	xTaskCreatePinnedToCore(sys_led_task, "sys_led_task", 1024, NULL, 24, NULL, 0);
 	ESP_LOGI(TAG, "Initializing SPIFFS");
 
 	esp_vfs_spiffs_conf_t conf = {
@@ -109,6 +114,7 @@ void init_spiffs(void *arg)
 
 	// Use settings defined above to initialize and mount SPIFFS filesystem.
 	// Note: esp_vfs_spiffs_register is an all-in-one convenience function.
+	sys_access();
 	esp_err_t ret = esp_vfs_spiffs_register(&conf);
 	if (ret != ESP_OK) {
 		if (ret == ESP_FAIL) {
@@ -124,6 +130,7 @@ void init_spiffs(void *arg)
 	}
 
 	ESP_LOGI(TAG, "Performing SPIFFS_check().");
+	sys_access();
 	ret = esp_spiffs_check(conf.partition_label);
 	if (ret != ESP_OK) {
 		ESP_LOGE(TAG, "SPIFFS_check() failed (%s)", esp_err_to_name(ret));
@@ -135,9 +142,11 @@ void init_spiffs(void *arg)
 	}
 
 	size_t total = 0, used = 0;
+	sys_access();
 	ret = esp_spiffs_info(conf.partition_label, &total, &used);
 	if (ret != ESP_OK) {
 		ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s). Formatting...", esp_err_to_name(ret));
+		sys_access();
 		esp_spiffs_format(conf.partition_label);
 		init_spiffs_handle = NULL;
 		vTaskDelete(NULL);
@@ -146,12 +155,13 @@ void init_spiffs(void *arg)
 		ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
 		char spiffs_info[64];
 		snprintf(spiffs_info, sizeof(spiffs_info), "Total: %d bytes | Used: %d bytes", total, used);
-		drawText(spiffs_info, 1, 1, 1);
+		drawText(spiffs_info, 255, 255, 255, 255);
 	}
 
 	// Check consistency of reported partiton size info.
 	if (used > total) {
 		ESP_LOGW(TAG, "Number of used bytes cannot be larger than total. Performing SPIFFS_check().");
+		sys_access();
 		ret = esp_spiffs_check(conf.partition_label);
 		// Could be also used to mend broken files, to clean unreferenced pages, etc.
 		// More info at https://github.com/pellepl/spiffs/wiki/FAQ#powerlosses-contd-when-should-i-run-spiffs_check
@@ -177,6 +187,7 @@ void init_console(void)
 
 void app_main(void) {
 	int main_id = 0;
+
 	gpio_set_direction (RP2040_RST_PIN, GPIO_MODE_OUTPUT);
 	gpio_set_level(RP2040_RST_PIN, 0);
 
@@ -184,8 +195,8 @@ void app_main(void) {
 	ESP_LOGI(TAG, "[APP] Startup..");
 	ESP_LOGI(TAG, "[APP] Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
 	ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
-	ESP_LOGI("PSRAM", "Gesamter PSRAM: %d Bytes", heap_caps_get_total_size(MALLOC_CAP_SPIRAM));
-	ESP_LOGI("PSRAM", "Freier PSRAM: %d Bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+	ESP_LOGI("PSRAM", "Gesamter PSRAM: %d Bytes", psram_getSize());
+	ESP_LOGI("PSRAM", "Freier PSRAM: %d Bytes", psram_getFree());
 
 	ESP_ERROR_CHECK(nvs_flash_init());
 	ESP_ERROR_CHECK(esp_netif_init());
@@ -198,37 +209,35 @@ void app_main(void) {
 	focus_request(main_id);
 
 	gpio_set_level(RP2040_RST_PIN, 1);
-	rpi_uart_init(0, configMAX_PRIORITIES-1);
-
-	vga_get_frame_size();
+	init_vga();
+	
 	printf("Window Size: %dx%d\n", vga_getWindowWidth(), vga_getWindowHeigth());
-
-	//boot_logo_animation_dynamic();
 
 	vga_clear_screen(0, 0, 0);  // schwarzer Hintergrund
 	// Titel
 	setCursor(10, 2);
-	drawText("ESPOS Operating System", 255, 255, 255);  // weiß
+	drawText("ESPOS Operating System", 255, 255, 255, 255);  // weiß
+
 	setCursorNextLine();
-	vga_draw_line(0, getYCursor(), 640, getYCursor(), 0, 255, 0);
+	vga_draw_line(0, getYCursor(), 640, getYCursor(), 0, 255, 0, 255);
 	vga_swap_buffers();
 	// Infos
 	setCursorNextLine();
-	drawText(">> Initializing subsystems...", 0, 255, 255);
+	drawText(">> Initializing subsystems...", 0, 255, 255, 255);
 
 	setCursorNextLine();
 	setCursorNextLine();
-	drawText(">> PSRAM: ", 255, 255, 0);
+	drawText(">> PSRAM: ", 255, 255, 0, 255);
 	vga_swap_buffers();
 
 	char psram_info[64];
 	snprintf(psram_info, sizeof(psram_info), "Total: %d bytes | Free: %d bytes",
-			heap_caps_get_total_size(MALLOC_CAP_SPIRAM),
-			heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-	drawText(psram_info, 255, 255, 255);
+			psram_getSize(),
+			psram_getFree());
+	drawText(psram_info, 255, 255, 255, 255);
 
 	setCursorNextLine();
-	drawText(">> SPIFFS: ", 255, 255, 0);
+	drawText(">> SPIFFS: ", 255, 255, 0, 255);
 	vga_swap_buffers();
 
 	//Initialize NVS
@@ -241,7 +250,7 @@ void app_main(void) {
 	float angle = 0.0f;
 	while(init_spiffs_handle != NULL)
 	{
-		vga_fill_circle(vga_getWindowWidth()/2, vga_getWindowHeigth()/2, 45, 0, 0, 0);
+		vga_fill_circle(vga_getWindowWidth()/2, vga_getWindowHeigth()/2, 45, 0, 0, 0, 255);
 		draw_spinner(vga_getWindowWidth()/2, vga_getWindowHeigth()/2, 40, angle);
 		vga_swap_buffers();
 
@@ -251,16 +260,15 @@ void app_main(void) {
 
 		vTaskDelay(pdMS_TO_TICKS(80));  // 80 ms Pause → flüssig
 	}
-	vga_fill_circle(vga_getWindowWidth()/2, vga_getWindowHeigth()/2, 45, 0, 0, 0);
+	vga_fill_circle(vga_getWindowWidth()/2, vga_getWindowHeigth()/2, 45, 0, 0, 0, 255);
 
 	setCursorNextLine();
-	drawText(">> Init Apps...", 0, 255, 255);
+	drawText(">> Init Apps...", 0, 255, 255, 255);
 	vga_swap_buffers();
-	init_systemcalls();
 	initApps();
 	
 	setCursorNextLine();
-	drawText(">> Wi-Fi: Connecting...", 255, 255, 0);
+	drawText(">> Wi-Fi: Connecting...", 255, 255, 0, 255);
 	setCursorNextLine();
 	vga_swap_buffers();
 	wifi_init_sta();
@@ -271,20 +279,30 @@ void app_main(void) {
 	ESP_LOGI(TAG, "[APP] Tasks activated %d", uxTaskGetNumberOfTasks());
 	
 	setCursorNextLine();
-	drawText("Bootloader v1.0 - Build 2025.08", 0, 0, 255);
+	drawText("Bootloader v1.0 - Build 2025.11", 0, 0, 255, 255);
 	setCursorNextLine();
-	drawText("RP2040 GPU online", 0, 255, 0);
+	drawText("RP2040 GPU online", 0, 255, 0, 255);
 	setCursorNextLine();
-	drawText("ESP32 Host initialized", 0, 255, 0);
+	drawText("ESP32 Host initialized", 0, 255, 0, 255);
 	setCursorNextLine();
-	vga_draw_line(0, getYCursor(), 640, getYCursor(), 0, 255, 0);
+	vga_draw_line(0, getYCursor(), 640, getYCursor(), 0, 255, 0, 255);
 	vga_swap_buffers();
 	setCursorNextLine();
 
 	focus_release(main_id);
+
 	init_console();
+	init_explorer(vga_getWindowWidth(), vga_getWindowHeigth());
 	while (1) {
-		vTaskDelay(pdMS_TO_TICKS(2000));
+		// if(getRxComplete())
+		// {
+		// 	if(getRxReg() == REG_TOUCH)
+		// 	{
+		// 		printf("Touch X: %d Touch Y: %d Pressed: %d\n", getRxData(0), getRxData(1), getRxData(2));
+		// 		clearRxComplete();
+		// 	}
+		// }
+		vTaskDelay(pdMS_TO_TICKS(500));
 	}
 	window_unregister(main_id);
 }

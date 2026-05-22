@@ -1,1 +1,0 @@
-shasum -a 256 build/firmware.bin

@@ -23,11 +23,11 @@ static int16_t ball_vx = BALL_SPEED_X;
 static int16_t ball_vy = BALL_SPEED_Y;
 
 static void draw_paddle(int x, int y) {
-	vga_fill_rect(x, y, PADDLE_WIDTH, PADDLE_HEIGHT, 255, 255, 255);
+	vga_fill_rect(x, y, PADDLE_WIDTH, PADDLE_HEIGHT, 255, 255, 255, 255);
 }
 
 static void draw_ball(int x, int y) {
-	vga_fill_circle(x, y, BALL_SIZE, 255, 255, 255);
+	vga_fill_circle(x, y, BALL_SIZE, 255, 255, 255, 255);
 }
 
 static void update_ball(void) {

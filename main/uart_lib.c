@@ -9,6 +9,7 @@
 #include "uart_lib.h"
 #include "pin_def.h"
 #include "../../register_def.h"
+#include "systemCalls.h"
 
 static const char *TAG = "uart";
 
@@ -19,11 +20,14 @@ static const char *TAG = "uart";
 static SemaphoreHandle_t tx_done_sem = NULL;
 static SemaphoreHandle_t send_mutex;
 uint8_t tx_disable = 0;
-uint8_t hw_flow = 0;
 
 TaskHandle_t UartRxHandle;
 TaskHandle_t UartTxHandle;
 TaskHandle_t LedRxTxHandle;
+
+QueueHandle_t vga_queue;
+QueueHandle_t touch_queue;
+QueueHandle_t gpio_queue;
 
 uint8_t led_count = 10;
 
@@ -135,7 +139,8 @@ void rpi_init(void) {
 void sendRPi(uint16_t reg, uint16_t* data, uint16_t size) {
 	xSemaphoreTake(send_mutex, portMAX_DELAY);
 
-	while (fifo_getSize(&txfifo) > MAX_BUFFER_SIZE - ((size * 2) + 12) || gpio_get_level(UART2_RX_PIN) == 0) {
+	while (fifo_getSize(&txfifo) > MAX_BUFFER_SIZE - ((size * 2) + 12) || gpio_get_level(UART2_RX_PIN) == 0)
+	{
 		printf("UART: Warte auf Puffer oder CTS HIGH\n");
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
@@ -190,6 +195,60 @@ static void tx_task(void *arg)
 			vTaskDelay(pdMS_TO_TICKS(10));
 		}
 	}
+}
+
+//Parsing for other Tasks
+// Return 2 = not complete yet
+// Return 1 = unknown Register
+// Return 0 = parse complete
+uint8_t parse_uart_cmd()
+{
+	if(getRxComplete())
+	{
+		if(getRxReg() == REG_VGA)
+		{
+			vga_event_t ev;
+			ev.cmd = getRxData(0);
+			ev.data0 = getRxData(1);
+			ev.data1 = getRxData(2);
+			xQueueSend(
+				vga_queue,
+				&ev,
+				0
+			);
+			clearRxComplete();
+			return 0;
+		}
+		else if(getRxReg() == REG_TOUCH)
+		{
+			touch_event_t ev;
+			ev.x = getRxData(0);
+			ev.y = getRxData(1);
+			ev.pressed = getRxData(2);
+			xQueueSend(
+				touch_queue,
+				&ev,
+				0
+			);
+			clearRxComplete();
+			return 0;
+		}
+		else if(getRxReg() == REG_GPIO)
+		{
+			gpio_event_t ev;
+			ev.cmd = getRxData(0);
+			ev.data0 = getRxData(1);
+			xQueueSend(
+				gpio_queue,
+				&ev,
+				0
+			);
+			clearRxComplete();
+			return 0;
+		}
+		return 1;
+	}
+	return 2;
 }
 
 /**********************************************************************
@@ -252,6 +311,7 @@ static void rx_task(void *arg)
 			// ESP_LOGI(TAG, "Read %d bytes: '%s'", rxBytes, data);
 			// ESP_LOG_BUFFER_HEXDUMP(TAG, data, rxBytes, ESP_LOG_INFO);
 		}
+		parse_uart_cmd();
 	}
 }
 
@@ -313,6 +373,11 @@ void rpi_uart_init(uint8_t core_num, uint8_t priority)
 	if(priority == 0) {
 		priority = configMAX_PRIORITIES-1;
 	}
+
+	gpio_queue = xQueueCreate(10, sizeof(gpio_event_t));
+	touch_queue = xQueueCreate(10, sizeof(touch_event_t));
+	vga_queue = xQueueCreate(20, sizeof(vga_event_t));
+
 	rpi_init();
 	xTaskCreatePinnedToCore(rx_task, "uart_rx_task", 1024*4, NULL, priority, UartRxHandle, core_num);
 	xTaskCreatePinnedToCore(tx_task, "uart_tx_task", 1024*4, NULL, priority, UartTxHandle, core_num);

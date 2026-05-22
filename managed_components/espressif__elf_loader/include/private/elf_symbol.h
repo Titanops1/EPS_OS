@@ -22,8 +22,6 @@ struct esp_elfsym {
     const void  *sym;       /*!< Function pointer */
 };
 
-void elf_set_custom_symbols(const struct esp_elfsym* symbols);
-
 /**
  * @brief Find symbol address by name.
  *

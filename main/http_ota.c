@@ -18,7 +18,7 @@ typedef struct {
 
 progress_bar_t progress_bar;
 
-#define APP_PATH "/spiffs/app.elf"  // 🔥 App wird hier gespeichert
+#define APP_PATH "/spiffs/application/app.elf"  // 🔥 App wird hier gespeichert
 
 esp_err_t app_upload_handler(httpd_req_t *req) {
 	FILE *file = fopen(APP_PATH, "wb");
@@ -62,10 +62,10 @@ esp_err_t ota_update_handler(httpd_req_t *req) {
 	if(focus_has(web_id))
 	{
 		vga_clear_screen(0, 0, 0);
-		vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255);
-		vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0);
+		vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255, 255);
+		vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0, 255);
 		setCursor(progress_bar.x, progress_bar.y+progress_bar.h+2);
-		drawText("OTA Update Init...", 255, 255, 255);
+		drawText("OTA Update Init...", 255, 255, 255, 255);
 		vga_swap_buffers();
 	}
 
@@ -76,10 +76,10 @@ esp_err_t ota_update_handler(httpd_req_t *req) {
 		if(focus_has(web_id))
 		{
 			vga_clear_screen(0, 0, 0);
-			vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255);
-			vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0);
+			vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255, 255);
+			vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0, 255);
 			setCursor(progress_bar.x, progress_bar.y+progress_bar.h+2);
-			drawText("OTA Update Init failed!", 255, 0, 0);
+			drawText("OTA Update Init failed!", 255, 0, 0, 255);
 			vga_swap_buffers();
 			focus_release(web_id);
 		}
@@ -94,10 +94,10 @@ esp_err_t ota_update_handler(httpd_req_t *req) {
 			if(focus_has(web_id))
 			{
 				vga_clear_screen(0, 0, 0);
-				vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255);
-				vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0);
+				vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255, 255);
+				vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0, 255);
 				setCursor(progress_bar.x, progress_bar.y+progress_bar.h+2);
-				drawText("OTA write Error", 255, 0, 0);
+				drawText("OTA write Error", 255, 0, 0, 255);
 				vga_swap_buffers();
 				focus_release(web_id);
 			}
@@ -114,18 +114,18 @@ esp_err_t ota_update_handler(httpd_req_t *req) {
 			if(progress_bar.last_width != progress_bar.bar_width)
 			{
 				vga_clear_screen(0, 0, 0);
-				vTaskDelay(pdMS_TO_TICKS(1));
-				vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255);
-				vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0);
+				vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255, 255);
+				vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0, 255);
 				setCursor(progress_bar.x, progress_bar.y+progress_bar.h+2);
 
 				// Fortschrittstext
 				char progress_text[32];
 				snprintf(progress_text, sizeof(progress_text), "%d%%", (int)(progress * 100));
-				drawText(progress_text, 255, 255, 255);
+				drawText(progress_text, 255, 255, 255, 255);
 				vga_swap_buffers();
 				progress_bar.last_width = progress_bar.bar_width;
 			}
+			vTaskDelay(pdMS_TO_TICKS(10));
 		}
 	}
 
@@ -134,10 +134,10 @@ esp_err_t ota_update_handler(httpd_req_t *req) {
 		if(focus_has(web_id))
 		{
 			vga_clear_screen(0, 0, 0);
-			vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255);
-			vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0);
+			vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255, 255);
+			vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0, 255);
 			setCursor(progress_bar.x, progress_bar.y+progress_bar.h+2);
-			drawText("OTA No Data received", 255, 0, 0);
+			drawText("OTA No Data received", 255, 0, 0, 255);
 			vga_swap_buffers();
 			focus_release(web_id);
 		}
@@ -147,10 +147,10 @@ esp_err_t ota_update_handler(httpd_req_t *req) {
 	if(focus_has(web_id))
 	{
 		vga_clear_screen(0, 0, 0);
-		vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255);
-		vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0);
+		vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255, 255);
+		vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0, 255);
 		setCursor(progress_bar.x, progress_bar.y+progress_bar.h+2);
-		drawText("OTA Update Complete", 255, 255, 255);
+		drawText("OTA Update Complete", 255, 255, 255, 255);
 		vga_swap_buffers();
 	}
 	ESP_LOGI(TAG, "OTA update complete");
@@ -161,10 +161,10 @@ esp_err_t ota_update_handler(httpd_req_t *req) {
 		if(focus_has(web_id))
 		{
 			vga_clear_screen(0, 0, 0);
-			vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255);
-			vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0);
+			vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255, 255);
+			vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0, 255);
 			setCursor(progress_bar.x, progress_bar.y+progress_bar.h+2);
-			drawText("OTA Update End Failed...", 255, 0, 0);
+			drawText("OTA Update End Failed...", 255, 0, 0, 255);
 			vga_swap_buffers();
 			focus_release(web_id);
 		}
@@ -178,10 +178,10 @@ esp_err_t ota_update_handler(httpd_req_t *req) {
 		if(focus_has(web_id))
 		{
 			vga_clear_screen(0, 0, 0);
-			vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255);
-			vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0);
+			vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255, 255);
+			vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0, 255);
 			setCursor(progress_bar.x, progress_bar.y+progress_bar.h+2);
-			drawText("OTA Set Bootpartition failed!", 255, 0, 0);
+			drawText("OTA Set Bootpartition failed!", 255, 0, 0, 255);
 			vga_swap_buffers();
 			focus_release(web_id);
 		}
@@ -193,10 +193,10 @@ esp_err_t ota_update_handler(httpd_req_t *req) {
 	if(focus_has(web_id))
 	{
 		vga_clear_screen(0, 0, 0);
-		vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255);
-		vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0);
+		vga_draw_rect(progress_bar.x, progress_bar.y, progress_bar.w, progress_bar.h, 255, 255, 255, 255);
+		vga_fill_rect(progress_bar.x+1, progress_bar.y+1, progress_bar.bar_width, progress_bar.h-2, 0, 200, 0, 255);
 		setCursor(progress_bar.x, progress_bar.y+progress_bar.h+2);
-		drawText("Restart", 255, 255, 255);
+		drawText("Restart", 255, 255, 255, 255);
 		vga_swap_buffers();
 	}
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
