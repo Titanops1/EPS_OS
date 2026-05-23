@@ -372,9 +372,7 @@ int move_cmd(int argc, char **argv) {
 		printf("Usage: mv <src> <dst>\n");
 		return 1;
 	}
-	remove(argv[2]);
-	rename(argv[1], argv[2]);
-	remove(argv[1]);
+	fs_move(argv[1], argv[2]);
 	return 0;
 }
 
@@ -383,8 +381,7 @@ int remove_cmd(int argc, char **argv) {
 		printf("Usage: rm <appname>\n");
 		return 1;
 	}
-	sys_access();
-	remove(argv[1]);
+	fs_remove(argv[1]);
 	return 0;
 }
 
@@ -395,10 +392,9 @@ int list_file_cmd(int argc, char **argv) {
 	}
 	DIR *dir;
 	struct dirent *ent;
-	sys_access();
+	SPIFFS_BEGIN();
 	if ((dir = opendir(argv[1])) != NULL) {
 		while ((ent = readdir(dir)) != NULL) {
-			sys_access();
 			printf("%s\n", ent->d_name);
 		}
 		closedir(dir);
@@ -406,6 +402,7 @@ int list_file_cmd(int argc, char **argv) {
 		perror("Fehler beim Öffnen des Verzeichnisses");
 		return 1;
 	}
+	SPIFFS_END();
 	return 0;
 }
 
@@ -414,20 +411,17 @@ int print_file_cmd(int argc, char **argv) {
 		printf("Usage: cat <filename>\n");
 		return 1;
 	}
-	sys_access();
 	const char *filename = argv[1];
-	FILE *file = fopen(filename, "r");
+	FILE *file = fs_open(filename, "r");
 	if(file == NULL) {
 		printf("Datei nicht gefunden\n");
 		return 1;
 	}
 	char line[128];
-	while(fgets(line, sizeof(line), file)) {
-		sys_access();
+	while(fs_gets(file, line, sizeof(line))) {
 		printf("%s", line);
 	}
-	sys_access();
-	fclose(file);
+	fs_close(file);
 	return 0;
 }
 

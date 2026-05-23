@@ -8,6 +8,7 @@
 #include "cJSON.h"
 #include <stdio.h>
 #include <string.h>
+#include "memory.h"
 #include "version.h"
 #include "vga.h"
 #include "window_manager.h"
@@ -124,14 +125,14 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 	switch (evt->event_id) {
 		case HTTP_EVENT_ERROR:
 			if (file) {
-				fclose(file);
+				fs_close(file);
 				file = NULL;
 			}
 			printf("HTTP_EVENT_ERROR\n");
 			break;
 		case HTTP_EVENT_ON_CONNECTED:
 			//printf("HTTP_EVENT_ON_CONNECTED\n");
-			file = fopen(OTA_FILE_PATH, "wb");
+			file = fs_open(OTA_FILE_PATH, "wb");
 			file_downlod_size = 0;
 
 			// int content_length = esp_http_client_fetch_headers(evt->client);
@@ -141,13 +142,13 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 			break;
 		case HTTP_EVENT_ON_DATA:
 			if (!file) {
-				fclose(file);
+				fs_close(file);
 				file = NULL;
 				//printf("HTTP_EVENT_ON_DATA: Datei nicht geöffnet\n");
 				return ESP_FAIL;
 			}
 			if (evt->data_len > 0) {
-				fwrite(evt->data, 1, evt->data_len, file);
+				fs_write(file, evt->data, 1, evt->data_len);
 				file_downlod_size += evt->data_len;
 				print_progress_bar(file_downlod_size, g_firmware_content_length);
 				//printf("File download, size=%ld Byte\n", file_downlod_size);
@@ -161,7 +162,7 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 			setCursorNextLine();
 			
 			if (file) {
-				fclose(file);
+				fs_close(file);
 				file = NULL;
 			}
 
@@ -191,7 +192,7 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 		case HTTP_EVENT_DISCONNECTED:
 			//printf("HTTP_EVENT_DISCONNECTED\n");
 			if (file) {
-				fclose(file);
+				fs_close(file);
 				file = NULL;
 			}
 			break;
@@ -346,7 +347,7 @@ bool ota_download_firmware(const char *url) {
  * Überprüft die Checksumme der heruntergeladenen Datei
  */
 bool ota_verify_checksum(const char *expected_hash) {
-	FILE *file = fopen(OTA_FILE_PATH, "rb");
+	FILE *file = fs_open(OTA_FILE_PATH, "rb");
 	if (!file) return false;
 
 	uint8_t hash[32];
@@ -357,13 +358,13 @@ bool ota_verify_checksum(const char *expected_hash) {
 
 	uint8_t buffer[1024];
 	size_t read_bytes;
-	while ((read_bytes = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+	while ((read_bytes = fs_read(file, buffer, 1, sizeof(buffer))) > 0) {
 		mbedtls_md_update(&ctx, buffer, read_bytes);
 	}
 
 	mbedtls_md_finish(&ctx, hash);
 	mbedtls_md_free(&ctx);
-	fclose(file);
+	fs_close(file);
 
 	char hash_str[65];
 	for (int i = 0; i < 32; i++) {
@@ -380,7 +381,7 @@ bool ota_perform_update(void) {
 	const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
 	esp_ota_handle_t update_handle;
 	
-	FILE *file = fopen(OTA_FILE_PATH, "rb");
+	FILE *file = fs_open(OTA_FILE_PATH, "rb");
 	if (!file) {
 		printf("Fehler: Kann Firmware nicht öffnen.\n");
 		return false;
@@ -389,16 +390,16 @@ bool ota_perform_update(void) {
 	esp_err_t err = esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &update_handle);
 	if (err != ESP_OK) {
 		ESP_LOGE("UPDATE_TASK", "esp_ota_begin fehlgeschlagen: %s", esp_err_to_name(err));
-		fclose(file);
+		fs_close(file);
 		printf("Fehler: OTA-Begin fehlgeschlagen.\n");
 		return false;
 	}
 
 	char buffer[1024];
 	int read_bytes;
-	while ((read_bytes = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+	while ((read_bytes = fs_read(file, buffer, 1, sizeof(buffer))) > 0) {
 		if (esp_ota_write(update_handle, buffer, read_bytes) != ESP_OK) {
-			fclose(file);
+			fs_close(file);
 			esp_ota_end(update_handle);
 			printf("Fehler: OTA-Schreibfehler. Rollback wird ausgeführt.\n");
 			esp_ota_mark_app_invalid_rollback_and_reboot();
@@ -406,7 +407,7 @@ bool ota_perform_update(void) {
 		}
 	}
 
-	fclose(file);
+	fs_close(file);
 	if (esp_ota_end(update_handle) != ESP_OK) {
 		printf("Fehler: OTA-Ende fehlgeschlagen. Rollback wird ausgeführt.\n");
 		esp_ota_mark_app_invalid_rollback_and_reboot();

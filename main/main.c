@@ -53,8 +53,6 @@
 
 static const char *TAG = "main";
 
-TaskHandle_t init_spiffs_handle;
-
 /****************************************
  * CORE 0 Beginn
  * Main Application
@@ -97,85 +95,6 @@ void boot_logo_animation_dynamic() {
 		vTaskDelay(pdMS_TO_TICKS(1000/FPS_BOOT));  // 20 FPS
 		time_cnt++;
 	}
-}
-
-void init_spiffs(void *arg)
-{
-	gpio_set_direction(BLUE_LED_PIN, GPIO_MODE_OUTPUT);
-	xTaskCreatePinnedToCore(sys_led_task, "sys_led_task", 1024, NULL, 24, NULL, 0);
-	ESP_LOGI(TAG, "Initializing SPIFFS");
-
-	esp_vfs_spiffs_conf_t conf = {
-	  .base_path = "/spiffs",
-	  .partition_label = NULL,
-	  .max_files = 20,
-	  .format_if_mount_failed = true
-	};
-
-	// Use settings defined above to initialize and mount SPIFFS filesystem.
-	// Note: esp_vfs_spiffs_register is an all-in-one convenience function.
-	sys_access();
-	esp_err_t ret = esp_vfs_spiffs_register(&conf);
-	if (ret != ESP_OK) {
-		if (ret == ESP_FAIL) {
-			ESP_LOGE(TAG, "Failed to mount or format filesystem");
-		} else if (ret == ESP_ERR_NOT_FOUND) {
-			ESP_LOGE(TAG, "Failed to find SPIFFS partition");
-		} else {
-			ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
-		}
-		init_spiffs_handle = NULL;
-		vTaskDelete(NULL);
-		return;
-	}
-
-	ESP_LOGI(TAG, "Performing SPIFFS_check().");
-	sys_access();
-	ret = esp_spiffs_check(conf.partition_label);
-	if (ret != ESP_OK) {
-		ESP_LOGE(TAG, "SPIFFS_check() failed (%s)", esp_err_to_name(ret));
-		init_spiffs_handle = NULL;
-		vTaskDelete(NULL);
-		return;
-	} else {
-		ESP_LOGI(TAG, "SPIFFS_check() successful");
-	}
-
-	size_t total = 0, used = 0;
-	sys_access();
-	ret = esp_spiffs_info(conf.partition_label, &total, &used);
-	if (ret != ESP_OK) {
-		ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s). Formatting...", esp_err_to_name(ret));
-		sys_access();
-		esp_spiffs_format(conf.partition_label);
-		init_spiffs_handle = NULL;
-		vTaskDelete(NULL);
-		return;
-	} else {
-		ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
-		char spiffs_info[64];
-		snprintf(spiffs_info, sizeof(spiffs_info), "Total: %d bytes | Used: %d bytes", total, used);
-		drawText(spiffs_info, 255, 255, 255, 255);
-	}
-
-	// Check consistency of reported partiton size info.
-	if (used > total) {
-		ESP_LOGW(TAG, "Number of used bytes cannot be larger than total. Performing SPIFFS_check().");
-		sys_access();
-		ret = esp_spiffs_check(conf.partition_label);
-		// Could be also used to mend broken files, to clean unreferenced pages, etc.
-		// More info at https://github.com/pellepl/spiffs/wiki/FAQ#powerlosses-contd-when-should-i-run-spiffs_check
-		if (ret != ESP_OK) {
-			ESP_LOGE(TAG, "SPIFFS_check() failed (%s)", esp_err_to_name(ret));
-			init_spiffs_handle = NULL;
-			vTaskDelete(NULL);
-			return;
-		} else {
-			ESP_LOGI(TAG, "SPIFFS_check() successful");
-		}
-	}
-	init_spiffs_handle = NULL;
-	vTaskDelete(NULL);
 }
 
 void init_console(void)
@@ -261,6 +180,10 @@ void app_main(void) {
 		vTaskDelay(pdMS_TO_TICKS(80));  // 80 ms Pause → flüssig
 	}
 	vga_fill_circle(vga_getWindowWidth()/2, vga_getWindowHeigth()/2, 45, 0, 0, 0, 255);
+
+	char spiffs_info[64];
+	snprintf(spiffs_info, sizeof(spiffs_info), "Total: %d bytes | Used: %d bytes", fs_memory.fs_total, fs_memory.fs_used);
+	drawText(spiffs_info, 255, 255, 255, 255);
 
 	setCursorNextLine();
 	drawText(">> Init Apps...", 0, 255, 255, 255);

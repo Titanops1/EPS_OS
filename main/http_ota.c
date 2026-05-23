@@ -21,7 +21,7 @@ progress_bar_t progress_bar;
 #define APP_PATH "/spiffs/application/app.elf"  // 🔥 App wird hier gespeichert
 
 esp_err_t app_upload_handler(httpd_req_t *req) {
-	FILE *file = fopen(APP_PATH, "wb");
+	FILE *file = fs_open(APP_PATH, "wb");
 	if (!file) {
 		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "⚠️ Konnte Datei nicht öffnen");
 		return ESP_FAIL;
@@ -31,11 +31,11 @@ esp_err_t app_upload_handler(httpd_req_t *req) {
 	int received, total_bytes = 0;
 
 	while ((received = httpd_req_recv(req, buf, sizeof(buf))) > 0) {
-		fwrite(buf, 1, received, file);
+		fs_write(file, buf, 1, received);
 		total_bytes += received;
 	}
 
-	fclose(file);
+	fs_close(file);
 	ESP_LOGI("APP Download","App gespeichert: %d Bytes\n", total_bytes);
 	
 	httpd_resp_sendstr(req, "Upload erfolgreich!");
