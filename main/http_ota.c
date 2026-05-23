@@ -1,4 +1,5 @@
 #include "http_ota.h"
+#include "memory.h"
 #include "window_manager.h"
 #include "vga.h"
 static const char *TAG = "OTA_WEB_SERVER";
@@ -31,7 +32,7 @@ esp_err_t app_upload_handler(httpd_req_t *req) {
 	int received, total_bytes = 0;
 
 	while ((received = httpd_req_recv(req, buf, sizeof(buf))) > 0) {
-		fs_write(file, buf, 1, received);
+		fs_write(file, buf, received);
 		total_bytes += received;
 	}
 

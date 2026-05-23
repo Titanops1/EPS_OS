@@ -148,7 +148,7 @@ static esp_err_t _http_event_handler_firmware(esp_http_client_event_t *evt) {
 				return ESP_FAIL;
 			}
 			if (evt->data_len > 0) {
-				fs_write(file, evt->data, 1, evt->data_len);
+				fs_write(file, evt->data, evt->data_len);
 				file_downlod_size += evt->data_len;
 				print_progress_bar(file_downlod_size, g_firmware_content_length);
 				//printf("File download, size=%ld Byte\n", file_downlod_size);
@@ -358,7 +358,7 @@ bool ota_verify_checksum(const char *expected_hash) {
 
 	uint8_t buffer[1024];
 	size_t read_bytes;
-	while ((read_bytes = fs_read(file, buffer, 1, sizeof(buffer))) > 0) {
+	while ((read_bytes = fs_read(file, buffer, sizeof(buffer))) > 0) {
 		mbedtls_md_update(&ctx, buffer, read_bytes);
 	}
 
@@ -397,7 +397,7 @@ bool ota_perform_update(void) {
 
 	char buffer[1024];
 	int read_bytes;
-	while ((read_bytes = fs_read(file, buffer, 1, sizeof(buffer))) > 0) {
+	while ((read_bytes = fs_read(file, buffer, sizeof(buffer))) > 0) {
 		if (esp_ota_write(update_handle, buffer, read_bytes) != ESP_OK) {
 			fs_close(file);
 			esp_ota_end(update_handle);
